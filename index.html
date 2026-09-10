@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fantasy Unlocked</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app" class="container">
+    <!-- Landing: brand story + username unlock -->
+    <section id="landing" class="landing-page">
+      <header class="lp-nav">
+        <div class="lp-brand" aria-label="Fantasy Unlocked">
+          <span class="lp-crown" aria-hidden="true">
+            <svg viewBox="0 0 32 32" width="22" height="22" fill="none">
+              <path d="M4 24h24v3H4v-3Zm2-3 5-11 5 8 5-8 5 11H6Z" fill="currentColor"/>
+              <circle cx="6" cy="9" r="2.2" fill="currentColor"/>
+              <circle cx="16" cy="6" r="2.2" fill="currentColor"/>
+              <circle cx="26" cy="9" r="2.2" fill="currentColor"/>
+            </svg>
+          </span>
+          <span class="lp-brand-text">FANTASY <em>UNLOCKED</em></span>
+        </div>
+        <p class="lp-nav-tag">Unlock the game within the game.</p>
+      </header>
+
+      <div class="lp-hero">
+        <div class="lp-hero-copy">
+          <p class="lp-kicker">Welcome to</p>
+          <h1 class="lp-hero-title">FANTASY <em>UNLOCKED</em></h1>
+          <p class="lp-hero-tagline">Unlock the game within the game.</p>
+          <p class="lp-hero-lede">
+            Fantasy Unlocked automatically tracks your performance, uncovers unique stats and rare moments, awards badges, and keeps tabs on the records and history that make your league remarkable.
+          </p>
+          <form id="username-form" class="lp-unlock-form">
+            <label for="username">Enter Your Sleeper Username</label>
+            <div class="lp-unlock-row">
+              <input type="text" id="username" placeholder="Enter Your Sleeper Username" autocomplete="username" required />
+              <button type="submit" id="submit-btn">Unlock <span aria-hidden="true">→</span></button>
+            </div>
+            <p id="landing-error" class="error hidden"></p>
+          </form>
+          <div id="lp-loading" class="lp-loading hidden" aria-live="polite">
+            <div class="spinner"></div>
+            <p class="loading-text" id="loading-status">Loading...</p>
+          </div>
+        </div>
+        <div class="lp-hero-visual">
+          <p class="lp-kicker">Six league titles</p>
+          <p class="lp-hero-titles-lede">Earn badges and discover what kind of manager you really are.</p>
+          <div id="lp-title-showcase" class="lp-title-showcase" aria-label="League titles"></div>
+        </div>
+      </div>
+
+      <div class="lp-below">
+        <section class="lp-story" aria-labelledby="lp-story-title">
+          <h2 id="lp-story-title" class="lp-story-title">Make every week count</h2>
+          <p class="lp-story-copy">
+            The site remembers what happens in your league. Track all-time records, season scoring titles, rare statistical feats, and the moments that become part of your league's history. Every week adds another chapter.
+          </p>
+        </section>
+
+        <section class="lp-close" aria-labelledby="lp-close-kicker">
+          <p id="lp-close-kicker" class="lp-close-kicker">More than a score.</p>
+          <p class="lp-close-line">It's the story of your league.</p>
+          <p class="lp-close-copy">
+            Every week reveals something new—who dominated, who got lucky, who made brilliant moves, who found a way to lose, and who made history.
+          </p>
+          <button type="button" id="lp-unlock-cta" class="lp-cta-btn">Unlock your league <span aria-hidden="true">→</span></button>
+        </section>
+      </div>
+    </section>
+
+    <!-- Landing: league picker (multi-league users only) -->
+    <section id="league-select-page" class="landing hidden">
+      <div class="landing-card landing-card--wide">
+        <p class="lp-brand lp-brand--compact" aria-hidden="true">FANTASY <em>UNLOCKED</em></p>
+        <h1>Select a league</h1>
+        <p class="subtitle" id="league-select-subtitle" style="margin-bottom: 0;">
+          Choose which league to analyze
+        </p>
+        <div id="league-select-list" class="league-select-list" role="listbox" aria-label="Your leagues"></div>
+        <button type="button" id="league-select-back" class="secondary" style="width: 100%;">
+          ← Different username
+        </button>
+        <p id="league-select-error" class="error hidden"></p>
+        <div id="league-select-loading" class="lp-loading hidden" aria-live="polite">
+          <div class="spinner"></div>
+          <p class="loading-text" id="league-select-loading-status">Loading...</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Dashboard -->
+    <section id="dashboard" class="hidden">
+      <button type="button" class="back-btn" id="back-btn">← Change user</button>
+      <div class="dash-header">
+        <h1 id="dash-title">Dashboard</h1>
+        <p class="meta" id="dash-meta"></p>
+      </div>
+      <div id="matchup-banner" class="matchup-hero hidden" aria-live="polite"></div>
+      <div class="dash-toolbar" id="dash-toolbar">
+        <div class="dash-nav" id="dash-nav"></div>
+        <div class="dash-toolbar-end">
+          <div class="week-bar" id="week-bar"></div>
+          <div id="dash-user-select" class="dash-user-select hidden"></div>
+        </div>
+      </div>
+      <div id="dash-loading-records" class="dash-loading-records hidden">
+        <div class="spinner"></div>
+        <p>Computing all-time records, milestones & collections…</p>
+      </div>
+      <!-- Your Week: JS renders Earned Achievements, Infamy, and League Nuggets. -->
+      <div id="your-week-panel" class="page-panel hidden"></div>
+      <div id="analytics-panel" class="hidden" aria-hidden="true"></div>
+      <div id="wall-panel" class="page-panel hidden" aria-label="Hall of Fame"></div>
+      <div id="collections-panel" class="page-panel hidden" aria-label="League Collections"></div>
+      <div id="achievements-panel" class="page-panel hidden" aria-label="Badge History"></div>
+    </section>
+  </div>
+
+  <!-- Local schedule dump: script-src works on file:// where fetch(schedules.json) often fails. -->
+  <script src="schedules-data.js"></script>
+  <script src="badgesConfig.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
