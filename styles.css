@@ -3214,7 +3214,7 @@ button.yw-belt-track[data-category-theme="league_historian"],
   position: absolute;
   top: 50%;
   z-index: 2;
-  transform: translate(-50%, calc(-100% - 6px));
+  transform: translate(-50%, 8px);
   font-size: 0.75rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -3247,40 +3247,50 @@ button.yw-belt-track[data-category-theme="league_historian"],
 }
 .yw-belt-race-marker--you {
   z-index: 4;
-  width: 2.3rem;
-  height: 2.3rem;
-  transform: translate(-50%, 12px);
-  border-radius: 50%;
-  display: flex;
+  width: auto;
+  height: auto;
+  min-width: 2.3rem;
+  max-width: 10.4rem;
+  padding: 0.16rem 0.5rem 0.22rem;
+  transform: translate(-50%, calc(-100% - 14px));
+  border-radius: 8px;
+  display: inline-flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: #fff;
-  border: 1.5px solid #fff;
+  gap: 0.16rem;
+  white-space: nowrap;
+  background: color-mix(in oklch, var(--belt-pill-tone, var(--belt-accent, #94a3b8)) 22%, #0c0e14);
+  border: 1.5px solid color-mix(in oklch, var(--belt-pill-tone, var(--belt-accent, #94a3b8)) 58%, transparent);
   box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.55),
-    0 2px 8px rgba(0, 0, 0, 0.45);
+    0 0 0 1px rgba(0, 0, 0, 0.35),
+    0 0 10px color-mix(in oklch, var(--belt-pill-tone, var(--belt-accent, #94a3b8)) 24%, transparent);
 }
 button.yw-belt-track--lead .yw-belt-race-marker--you,
 button.yw-belt-track--tied .yw-belt-race-marker--you,
 .yw-belt-race-marker--you-end {
-  transform: translate(-100%, 12px);
+  transform: translate(-100%, calc(-100% - 14px));
 }
 .yw-belt-race-marker--you-start {
-  transform: translate(0, 12px);
+  transform: translate(0, calc(-100% - 14px));
 }
 .yw-belt-race-you-label {
-  font-size: 0.72rem;
+  display: block;
+  max-width: 9.6rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.78rem;
   font-weight: 800;
-  letter-spacing: 0.04em;
-  line-height: 1;
-  color: #000;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+  color: #fff;
 }
 .yw-belt-race-marker--you-lead {
-  border-color: #fbbf24;
+  border-color: color-mix(in oklch, var(--belt-pill-tone, var(--belt-accent, #94a3b8)) 72%, #fff);
   box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.55),
-    0 0 0 2px rgba(251, 191, 36, 0.55),
-    0 2px 8px rgba(0, 0, 0, 0.45);
+    0 0 0 1px rgba(0, 0, 0, 0.35),
+    0 0 14px color-mix(in oklch, var(--belt-pill-tone, var(--belt-accent, #94a3b8)) 36%, transparent);
 }
 .yw-belt-race-marker--pill {
   z-index: 3;
@@ -3295,18 +3305,18 @@ button.yw-belt-track--tied .yw-belt-race-marker--you,
   gap: 0.16rem;
   min-width: 0;
   white-space: nowrap;
-  transform: translate(-50%, calc(-100% - 14px));
-  background: color-mix(in oklch, var(--belt-pill-tone, var(--belt-accent, #94a3b8)) 22%, #0c0e14);
-  border: 1.5px solid color-mix(in oklch, var(--belt-pill-tone, var(--belt-accent, #94a3b8)) 58%, transparent);
+  transform: translate(-50%, 12px);
+  background: #fff;
+  border: 1.5px solid #fff;
   box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.35),
-    0 0 10px color-mix(in oklch, var(--belt-pill-tone, var(--belt-accent, #94a3b8)) 24%, transparent);
+    0 0 0 1px rgba(0, 0, 0, 0.55),
+    0 2px 8px rgba(0, 0, 0, 0.45);
 }
 .yw-belt-race-marker--pill-end {
-  transform: translate(-100%, calc(-100% - 14px));
+  transform: translate(-100%, 12px);
 }
 .yw-belt-race-marker--pill-start {
-  transform: translate(0, calc(-100% - 14px));
+  transform: translate(0, 12px);
 }
 .yw-belt-race-pill-name {
   display: flex;
@@ -3320,7 +3330,7 @@ button.yw-belt-track--tied .yw-belt-race-marker--you,
   font-weight: 800;
   letter-spacing: 0.01em;
   line-height: 1.2;
-  color: #fff;
+  color: #000;
 }
 .yw-belt-race-pill-user {
   min-width: 0;
@@ -3328,11 +3338,18 @@ button.yw-belt-track--tied .yw-belt-race-marker--you,
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.yw-belt-race-marker--pill .yw-belt-race-count {
+.yw-belt-race-marker--pill .yw-belt-race-count,
+.yw-belt-race-marker--you .yw-belt-race-count {
   position: static;
   top: auto;
   left: auto;
   transform: none;
+}
+.yw-belt-race-marker--pill .yw-belt-race-count {
+  color: #000;
+  background: #fff;
+  border: 1.5px solid #111;
+  box-shadow: none;
 }
 .yw-belt-race-count {
   position: absolute;
@@ -3578,11 +3595,12 @@ button.yw-belt-track--tied.yw-belt-track--active {
     right: 1.15rem;
   }
   .yw-belt-race-marker--you {
-    width: 2.05rem;
-    height: 2.05rem;
+    min-width: 2.05rem;
+    width: auto;
+    height: auto;
   }
   .yw-belt-race-you-label {
-    font-size: 0.64rem;
+    font-size: 0.7rem;
   }
   .yw-belt-race-marker--pill {
     max-width: 7.5rem;
@@ -9158,6 +9176,42 @@ button.belt-card:hover:not(:disabled),
     min-width: 0;
   }
 
+  #dashboard:has(#your-week-panel:not(.hidden)) .dash-toolbar-end {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    gap: 0.35rem;
+  }
+
+  #dashboard:has(#your-week-panel:not(.hidden)) .week-bar--selects {
+    flex: 0 0 auto;
+    width: fit-content;
+    min-width: 0;
+    gap: 0.35rem;
+  }
+
+  #dashboard:has(#your-week-panel:not(.hidden)) .week-bar--selects .dash-select-wrap,
+  #dashboard:has(#your-week-panel:not(.hidden)) .dash-user-select,
+  #dashboard:has(#your-week-panel:not(.hidden)) .dash-user-select .dash-select-wrap {
+    flex: 0 0 auto;
+    width: fit-content;
+    min-width: 0;
+    max-width: none;
+  }
+
+  #dashboard:has(#your-week-panel:not(.hidden)) .dash-select,
+  #dashboard:has(#your-week-panel:not(.hidden)) #your-week-week-select,
+  #dashboard:has(#your-week-panel:not(.hidden)) #your-week-season-select,
+  #dashboard:has(#your-week-panel:not(.hidden)) #your-week-user-select {
+    width: fit-content;
+    max-width: none;
+    min-width: 0;
+    field-sizing: content;
+    padding: 0.4rem 1.35rem 0.4rem 0.6rem;
+    font-size: 0.8rem;
+    line-height: 1.2;
+    background-position: right 0.4rem center;
+  }
+
   .week-bar,
   .lb-scope-bar {
     gap: 0.45rem;
@@ -9241,6 +9295,14 @@ button.belt-card:hover:not(:disabled),
     padding: 0.85rem 0.7rem 0.95rem;
   }
 
+  .yw-moves-sub {
+    white-space: normal;
+    word-break: break-word;
+    overflow: visible;
+    height: auto;
+    max-width: 100%;
+  }
+
   .yw-belt-track-head {
     display: flex;
     flex-direction: row;
@@ -9251,33 +9313,48 @@ button.belt-card:hover:not(:disabled),
     width: 100%;
   }
 
-  .yw-belt-track-belt {
-    display: flex;
-    flex-wrap: nowrap;
-    align-items: flex-start;
-    flex: 0 1 auto;
-    min-width: 0;
-    max-width: 100%;
-  }
-
+  .yw-belt-track-belt,
+  .yw-belt-track-title,
   .yw-belt-track-name-row {
-    flex-wrap: wrap;
+    display: contents;
   }
 
   .yw-belt-track-name {
+    order: 1;
     white-space: normal;
+    word-break: break-word;
     overflow: visible;
     text-overflow: unset;
     font-size: 1.02rem;
     line-height: 1.2;
   }
 
+  .yw-belt-track-icon {
+    order: 2;
+  }
+
   .yw-belt-track-hint {
+    order: 3;
+    flex: 1 1 100%;
+    width: 100%;
+    max-width: 100%;
     white-space: normal;
+    word-break: break-word;
+    overflow: visible;
+    text-overflow: unset;
+    height: auto;
+    line-height: 1.3;
+    margin-top: 2px;
+    margin-bottom: 6px;
+  }
+
+  .yw-belt-rank {
+    order: 4;
   }
 
   .yw-belt-track-chips {
-    flex: 0 1 auto;
+    order: 5;
+    flex: 0 0 auto;
   }
 
   .yw-belt-race {
@@ -9311,33 +9388,42 @@ button.belt-card:hover:not(:disabled),
 
   .yw-belt-race-marker--pill {
     top: 50%;
+    width: auto;
     height: auto;
-    max-width: none;
-    padding: 0;
-    gap: 0.12rem;
-    flex-direction: column;
+    max-width: 10.4rem;
+    padding: 2px 8px;
+    gap: 4px;
+    display: inline-flex;
+    flex-direction: row;
     align-items: center;
-    background: transparent;
-    border: none;
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    border-radius: 12px;
     box-shadow: none;
-    transform: translate(-50%, calc(-100% - 14px));
+    transform: translate(-50%, 12px);
   }
 
   .yw-belt-race-marker--pill-end {
-    transform: translate(-100%, calc(-100% - 14px));
+    transform: translate(-100%, 12px);
   }
 
   .yw-belt-race-marker--pill-start {
-    transform: translate(0, calc(-100% - 14px));
+    transform: translate(0, 12px);
   }
 
   .yw-belt-race-pill-name {
-    max-width: 7.2rem;
-    font-size: 0.58rem;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    line-height: 1.15;
-    color: #cbd5e1;
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    max-width: 8.4rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+    line-height: 1.2;
+    color: #000;
   }
 
   .yw-belt-race-marker--pill .yw-belt-race-count {
@@ -9348,7 +9434,12 @@ button.belt-card:hover:not(:disabled),
     min-width: 1.2rem;
     height: 1.1rem;
     padding: 0 0.38rem;
+    border-radius: 999px;
     font-size: 0.66rem;
+    color: #000;
+    background: #fff;
+    border: 1.5px solid #111;
+    box-shadow: none;
   }
 
   .yw-belt-race-marker--you,
@@ -9356,17 +9447,48 @@ button.belt-card:hover:not(:disabled),
   button.yw-belt-track--tied .yw-belt-race-marker--you {
     top: 50%;
     bottom: auto;
-    transform: translate(-50%, 12px);
+    width: auto;
+    height: auto;
+    min-width: 2.05rem;
+    padding: 2px 8px;
+    border-radius: 8px;
+    display: inline-flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+    background: color-mix(in oklch, var(--belt-pill-tone, var(--belt-accent, #94a3b8)) 22%, #0c0e14);
+    border: 1.5px solid color-mix(in oklch, var(--belt-pill-tone, var(--belt-accent, #94a3b8)) 58%, transparent);
+    box-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.35),
+      0 0 10px color-mix(in oklch, var(--belt-pill-tone, var(--belt-accent, #94a3b8)) 24%, transparent);
+    transform: translate(-50%, calc(-100% - 14px));
+  }
+
+  .yw-belt-race-you-label {
+    max-width: 8.4rem;
+    font-size: 0.72rem;
+  }
+
+  .yw-belt-race-marker--you .yw-belt-race-count {
+    position: static;
+    top: auto;
+    left: auto;
+    transform: none;
+    min-width: 1.2rem;
+    height: 1.1rem;
+    padding: 0 0.38rem;
+    border-radius: 999px;
+    font-size: 0.66rem;
   }
 
   .yw-belt-race-marker--you-end,
   button.yw-belt-track--lead .yw-belt-race-marker--you-end,
   button.yw-belt-track--tied .yw-belt-race-marker--you-end {
-    transform: translate(-100%, 12px);
+    transform: translate(-100%, calc(-100% - 14px));
   }
 
   .yw-belt-race-marker--you-start {
-    transform: translate(0, 12px);
+    transform: translate(0, calc(-100% - 14px));
   }
 
   .lb-row,

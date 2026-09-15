@@ -16568,6 +16568,8 @@
       const pillRow = chaseLeader || secondPlace || null;
       const pillTotal = pillRow ? Number(pillRow.total) || 0 : 0;
       const pillName = pillRow?.name || "";
+      const myName = String(myRow?.name || "").trim();
+      const youLabel = myName || "You";
       const barMax = Math.max(topTotal, myTotal, pillTotal, 1);
       const youPct = Math.max(0, Math.min(100, (myTotal / barMax) * 100));
       const pillPct =
@@ -16671,7 +16673,7 @@
         )}" data-yw-belt-open="${escapeHtml(belt.id)}" aria-expanded="${
           isExpanded ? "true" : "false"
         }" aria-label="${escapeHtml(
-          `${belt.name}: ${rankLabel}. You: ${myTotal}${
+          `${belt.name}: ${rankLabel}. ${youLabel}: ${myTotal}${
             weeklyDelta > 0 ? `. +${weeklyDelta} this week` : ""
           }${
             pillName
@@ -16727,7 +16729,11 @@
               ${gapHtml}
               <span class="yw-belt-race-marker yw-belt-race-marker--you${youLeadClass}${youEdgeClass}" style="left: ${youPct.toFixed(
                 1
-              )}%"><span class="yw-belt-race-you-label">YOU</span>${badgeCountHtml(
+              )}%" title="${escapeHtml(
+                youLabel
+              )}"><span class="yw-belt-race-you-label">${escapeHtml(
+                youLabel
+              )}</span>${badgeCountHtml(
                 myTotal
               )}</span>
               </div>
