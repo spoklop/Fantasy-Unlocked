@@ -3075,9 +3075,9 @@ button.yw-belt-track--active {
   letter-spacing: 0.01em;
   line-height: 1.3;
   color: rgba(255, 255, 255, 0.6);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
   max-width: 100%;
 }
 .yw-belt-track-chips {

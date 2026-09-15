@@ -16697,7 +16697,7 @@
                 ${
                   TITLE_RACE_SUBTITLES[belt.id]
                     ? `<span class="yw-belt-track-hint">${escapeHtml(
-                        TITLE_RACE_SUBTITLES[belt.id]
+                        `${TITLE_RACE_SUBTITLES[belt.id]}. Click title for full leaderboard.`
                       )}</span>`
                     : ""
                 }
