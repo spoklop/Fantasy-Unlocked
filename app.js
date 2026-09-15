@@ -22,6 +22,12 @@
      * Prefer per-league leagueObj.regularSeasonWeeks whenever available.
      */
     const DEFAULT_REGULAR_SEASON_LAST_WEEK = 17;
+    /**
+     * After scheduled kickoff (ET), wait this long before treating a game as
+     * concluded. Temporary 10-minute buffer (was ~5h) to unblock 2026 Week 1
+     * testing; a correction-safe recompute will be designed separately.
+     */
+    const NFL_GAME_COMPLETION_BUFFER_MS = 10 * 60 * 1000;
 
     // Maps nflverse abbreviations to Sleeper API abbreviations
     // nflverse is used in schedules.json
@@ -210,6 +216,28 @@
       return res.json();
     }
 
+    /** Sleeper league list is keyed by NFL season year, not a hardcoded calendar. */
+    async function fetchUserNflLeagues(userId) {
+      let nflState = state.nflState;
+      if (!nflState) {
+        nflState = await fetchJSON(`${API}/state/nfl`).catch(() => null);
+        state.nflState = nflState || null;
+      }
+      const seasonYear = String(
+        nflState?.league_season || nflState?.season || new Date().getFullYear()
+      );
+      let leagues = await fetchJSON(
+        `${API}/user/${userId}/leagues/nfl/${seasonYear}`
+      );
+      if (!leagues?.length) {
+        const prev = String(Number(seasonYear) - 1);
+        if (Number.isFinite(Number(prev)) && Number(prev) >= 2010) {
+          leagues = await fetchJSON(`${API}/user/${userId}/leagues/nfl/${prev}`);
+        }
+      }
+      return { leagues: leagues || [], seasonYear };
+    }
+
     function show(el) { if (el) el.classList.remove("hidden"); }
     function hide(el) { if (el) el.classList.add("hidden"); }
 
@@ -262,8 +290,17 @@
 
     function renderLeagueSelectPage(leagues) {
       const username = state.user?.display_name || state.user?.username || "Manager";
+      const seasonLabels = [
+        ...new Set(leagues.map((l) => l.season).filter((y) => y != null)),
+      ];
+      const seasonBit =
+        seasonLabels.length === 1
+          ? `NFL ${seasonLabels[0]}`
+          : seasonLabels.length
+            ? `NFL ${seasonLabels.join("/")}`
+            : "NFL";
       $("league-select-subtitle").textContent =
-        `${username} · ${leagues.length} NFL ${SEASON} leagues — pick one to analyze`;
+        `${username} · ${leagues.length} ${seasonBit} leagues — pick one to analyze`;
       const list = $("league-select-list");
       list.innerHTML = leagues
         .map((l) => {
@@ -565,7 +602,8 @@
       const statsKey = `${season}_${week}`;
       if (
         state.weeklyStatsCache &&
-        statsKey in state.weeklyStatsCache
+        statsKey in state.weeklyStatsCache &&
+        isNflWeekFullyComplete(season, week)
       ) {
         historicalTeamCache[cacheKey] = team;
       }
@@ -575,10 +613,18 @@
     async function preloadWeeklyStats(season, week) {
       const statsKey = `${season}_${week}`;
       if (!state.weeklyStatsCache) state.weeklyStatsCache = {};
-      if (statsKey in state.weeklyStatsCache) return;
+      // Finished weeks: keep the first snapshot. In-progress weeks: refetch
+      // every call so a Sunday-afternoon load cannot freeze Monday-night stats.
+      if (
+        statsKey in state.weeklyStatsCache &&
+        isNflWeekFullyComplete(season, week)
+      ) {
+        return;
+      }
 
       try {
         // api.sleeper.com week stats include `team` per player (api.sleeper.app/v1 does not).
+        // Query shape is stats/nfl/{season}/{week}?season_type=regular — not .../regular/...
         const data = await fetchJSON(
           `https://api.sleeper.com/stats/nfl/${season}/${week}?season_type=regular`
         );
@@ -1732,13 +1778,35 @@
       return ids;
     }
 
-    /** Preload every completed week's NFL stats (batches of 10). */
+    /** Preload finished weeks plus any still-in-progress week that has scoring. */
     async function preloadAllHistoricalWeeklyStats() {
       if (!state.weeklyStatsCache) state.weeklyStatsCache = {};
       const allWeekKeys = [];
+      const seen = new Set();
+      const pushKey = (season, week) => {
+        const key = `${season}_${week}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        allWeekKeys.push({ season, week });
+      };
+      const nflSeason = Number(
+        state.nflState?.season || state.nflState?.league_season
+      );
+      const nflWeek = Number(state.nflState?.week);
       for (const [season, seasonData] of Object.entries(state.seasonData || {})) {
         for (const week of seasonData.completedWeeks || []) {
-          allWeekKeys.push({ season, week });
+          pushKey(season, week);
+        }
+        for (const week of getTrackedWeeksForSeason(seasonData)) {
+          const w = Number(week);
+          if (isNflWeekFullyComplete(season, w)) continue;
+          const hasScoring = weekHasScoring(seasonData.matchupsByWeek?.[w]);
+          const isCurrentNflWeek =
+            Number.isFinite(nflSeason) &&
+            Number.isFinite(nflWeek) &&
+            Number(season) === nflSeason &&
+            w === nflWeek;
+          if (hasScoring || isCurrentNflWeek) pushKey(season, w);
         }
       }
 
@@ -1882,14 +1950,129 @@
       return leagueObj;
     }
 
-    function detectCompletedWeeks(matchupsByWeek, weekList) {
+    /**
+     * Convert a schedules-data.js Eastern wall-clock (gameday + HH:MM) to UTC ms.
+     * Kickoff times in the dump are America/New_York local, including DST.
+     */
+    function easternWallTimeToUtcMs(gameday, gametime) {
+      const day = String(gameday || "");
+      const mins = parseGametimeMinutesEt(gametime);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || mins == null) return null;
+      const [year, month, date] = day.split("-").map(Number);
+      const hour = Math.floor(mins / 60);
+      const minute = mins % 60;
+      const formatter = new Intl.DateTimeFormat("en-US", {
+        timeZone: "America/New_York",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23",
+      });
+      const asUtcTuple = (ms) => {
+        const map = {};
+        for (const p of formatter.formatToParts(new Date(ms))) {
+          if (p.type !== "literal") map[p.type] = p.value;
+        }
+        return Date.UTC(
+          Number(map.year),
+          Number(map.month) - 1,
+          Number(map.day),
+          Number(map.hour),
+          Number(map.minute)
+        );
+      };
+      const want = Date.UTC(year, month - 1, date, hour, minute);
+      let ms = want;
+      for (let i = 0; i < 4; i++) {
+        const delta = want - asUtcTuple(ms);
+        if (delta === 0) break;
+        ms += delta;
+      }
+      return ms;
+    }
+
+    function getScheduledNflGamesForWeek(season, week) {
+      const s = Number(season);
+      const w = Number(week);
+      if (!Number.isFinite(s) || !Number.isFinite(w)) return [];
+      const seen = new Set();
+      const games = [];
+      for (const g of typeof SCHEDULE_DATA !== "undefined" ? SCHEDULE_DATA : []) {
+        if (Number(g.season) !== s || Number(g.week) !== w) continue;
+        if (!g.gameday) continue;
+        const id = g.game_id || `${g.gameday}_${g.home_team}_${g.away_team}`;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        games.push(g);
+      }
+      return games;
+    }
+
+    function isScheduledNflGameConcluded(game, nowMs = Date.now()) {
+      const kick = easternWallTimeToUtcMs(
+        game?.gameday,
+        game?.gametime || "13:00"
+      );
+      if (kick == null) return false;
+      return nowMs >= kick + NFL_GAME_COMPLETION_BUFFER_MS;
+    }
+
+    /**
+     * True only when every scheduled NFL game for this season/week has had
+     * time to finish. Uses schedules-data.js kickoff (ET) + a 5h buffer —
+     * not Sleeper stats. The stats payload has no reliable week-final flag
+     * (rows appear as soon as games start, so Sunday afternoon looks “done”).
+     *
+     * When the dump has no games for that week (e.g. 2026 before the dump
+     * is updated): never lock the current/future NFL week; treat clearly
+     * past weeks as complete via nflState.
+     */
+    function isNflWeekFullyComplete(season, week) {
+      const s = Number(season);
+      const w = Number(week);
+      if (!Number.isFinite(s) || !Number.isFinite(w) || w < 1) return false;
+
+      const games = getScheduledNflGamesForWeek(s, w);
+      if (games.length > 0) {
+        return games.every((g) => isScheduledNflGameConcluded(g));
+      }
+
+      const nflSeason = Number(
+        state.nflState?.season || state.nflState?.league_season
+      );
+      const nflWeek = Number(state.nflState?.week);
+      if (Number.isFinite(nflSeason) && s < nflSeason) return true;
+      if (
+        Number.isFinite(nflSeason) &&
+        Number.isFinite(nflWeek) &&
+        s === nflSeason &&
+        w < nflWeek
+      ) {
+        return true;
+      }
+      if (Number.isFinite(nflSeason) && s === nflSeason && w === nflWeek) {
+        return false;
+      }
+      if (Number.isFinite(nflSeason) && s > nflSeason) return false;
+
+      const calYear = new Date().getFullYear();
+      if (s < calYear - 1) return true;
+      return false;
+    }
+
+    function detectCompletedWeeks(matchupsByWeek, weekList, seasonYear) {
       const weeks = [];
       const range =
         Array.isArray(weekList) && weekList.length
           ? weekList
           : weekRangeInclusive(1, DEFAULT_REGULAR_SEASON_LAST_WEEK);
       for (const w of range) {
-        if (weekHasScoring(matchupsByWeek[w])) weeks.push(Number(w));
+        const n = Number(w);
+        if (!weekHasScoring(matchupsByWeek[n])) continue;
+        if (!isNflWeekFullyComplete(seasonYear, n)) continue;
+        weeks.push(n);
       }
       return weeks;
     }
@@ -1946,16 +2129,22 @@
     async function loadOneSeason(leagueObj, userId) {
       annotateLeagueWeekRange(leagueObj);
       const leagueId = leagueObj.league_id;
-      const [rosters, leagueUsers] = await Promise.all([
+      const [rosters, leagueUsers, winnersBracket] = await Promise.all([
         fetchJSON(`${API}/league/${leagueId}/rosters`),
         fetchJSON(`${API}/league/${leagueId}/users`),
+        fetchJSON(`${API}/league/${leagueId}/winners_bracket`).catch(() => null),
       ]);
       const roster = rosters.find((r) => r.owner_id === userId);
       if (!roster) throw new Error(`Could not find your roster in the ${leagueObj.season} season.`);
 
+      const bracket = Array.isArray(winnersBracket) ? winnersBracket : [];
       const regularSeasonWeeks = getRegularSeasonWeeks(leagueObj);
+      const playoffWeeks = getPlayoffWeeksFromBracket(leagueObj, bracket);
+      const weeksToFetch = [...new Set([...regularSeasonWeeks, ...playoffWeeks])].sort(
+        (a, b) => a - b
+      );
       const weekFetches = [];
-      for (const w of regularSeasonWeeks) {
+      for (const w of weeksToFetch) {
         weekFetches.push(
           Promise.all([
             fetchJSON(`${API}/league/${leagueId}/matchups/${w}`).then((data) => ({
@@ -1990,11 +2179,22 @@
         transactionsByWeek,
         earlyRoundDraftPicksByRoster: draftPicks.earlyRoundDraftPicksByRoster,
         firstRoundDraftPicksByRoster: draftPicks.firstRoundDraftPicksByRoster,
-        completedWeeks: detectCompletedWeeks(matchupsByWeek, regularSeasonWeeks),
+        completedWeeks: detectCompletedWeeks(
+          matchupsByWeek,
+          [...new Set([...regularSeasonWeeks, ...playoffWeeks])],
+          leagueObj.season
+        ),
+        regularCompletedWeeks: detectCompletedWeeks(
+          matchupsByWeek,
+          regularSeasonWeeks,
+          leagueObj.season
+        ),
         rosterId: roster.roster_id,
         leagueObj,
         playoffWeekStart: leagueObj.playoffWeekStart,
         regularSeasonWeeks,
+        playoffWeeks,
+        winnersBracket: bracket,
       };
     }
 
@@ -2296,6 +2496,100 @@
       return getRegularSeasonWeeks(leagueObj).includes(w);
     }
 
+    function getPlayoffWeeksFromBracket(leagueObj, winnersBracket) {
+      const start = readPlayoffWeekStart(leagueObj);
+      if (start == null) return [];
+      let maxRound = 0;
+      for (const g of winnersBracket || []) {
+        const r = Number(g.r);
+        if (Number.isFinite(r) && r > maxRound) maxRound = r;
+      }
+      if (maxRound < 1) maxRound = 3;
+      const last = Math.min(start + maxRound - 1, 18);
+      if (last < start) return [];
+      return weekRangeInclusive(start, last);
+    }
+
+    function getTrackedWeeksForSeason(leagueOrSeason) {
+      const regular = getRegularSeasonWeeks(leagueOrSeason);
+      const playoff = (
+        leagueOrSeason?.playoffWeeks ||
+        leagueOrSeason?.leagueObj?.playoffWeeks ||
+        []
+      )
+        .map(Number)
+        .filter((w) => Number.isFinite(w));
+      return [...new Set([...regular, ...playoff])].sort((a, b) => a - b);
+    }
+
+    /**
+     * Roster ids playing in Sleeper's winners bracket this week.
+     * null = regular season (everyone). Empty set = playoff week but nobody
+     * in the championship round (do not treat consolation as eligible).
+     */
+    function getChampionshipRosterIdsForWeek(seasonData, week) {
+      const start = Number(
+        seasonData?.playoffWeekStart ??
+          readPlayoffWeekStart(seasonData?.leagueObj)
+      );
+      const w = Number(week);
+      if (!Number.isFinite(start) || start < 2 || !Number.isFinite(w) || w < start) {
+        return null;
+      }
+      const round = w - start + 1;
+      const ids = new Set();
+      for (const g of seasonData?.winnersBracket || []) {
+        if (Number(g.r) !== round) continue;
+        const t1 = Number(g.t1);
+        const t2 = Number(g.t2);
+        if (Number.isFinite(t1) && t1 > 0) ids.add(t1);
+        if (Number.isFinite(t2) && t2 > 0) ids.add(t2);
+      }
+      return ids;
+    }
+
+    function isChampionshipPlayoffRoster(seasonData, week, rosterId) {
+      const ids = getChampionshipRosterIdsForWeek(seasonData, week);
+      if (ids == null) return true;
+      return ids.has(Number(rosterId));
+    }
+
+    /** Still in the winners-bracket tournament this week (playing or on a bye). */
+    function isAliveInChampionshipBracket(seasonData, week, rosterId) {
+      const ids = getChampionshipRosterIdsForWeek(seasonData, week);
+      if (ids == null) return true;
+      const rid = Number(rosterId);
+      if (ids.has(rid)) return true;
+      const start = Number(
+        seasonData?.playoffWeekStart ??
+          readPlayoffWeekStart(seasonData?.leagueObj)
+      );
+      const w = Number(week);
+      const round = w - start + 1;
+      const bracket = seasonData?.winnersBracket || [];
+      if (!bracket.length || !Number.isFinite(round)) return false;
+      let appeared = false;
+      for (const g of bracket) {
+        const t1 = Number(g.t1);
+        const t2 = Number(g.t2);
+        if (t1 === rid || t2 === rid) appeared = true;
+        if (Number(g.r) < round && Number(g.l) === rid) return false;
+      }
+      return appeared;
+    }
+
+    function isEliminatedFromChampionship(seasonData, week, rosterId) {
+      if (getChampionshipRosterIdsForWeek(seasonData, week) == null) return false;
+      if (!(seasonData?.winnersBracket || []).length) return false;
+      return !isAliveInChampionshipBracket(seasonData, week, rosterId);
+    }
+
+    function championshipMatchups(seasonData, week, matchups) {
+      const ids = getChampionshipRosterIdsForWeek(seasonData, week);
+      if (ids == null) return matchups || [];
+      return (matchups || []).filter((m) => ids.has(Number(m.roster_id)));
+    }
+
     function getManagerName(roster, leagueUsers = state.leagueUsers) {
       const team = roster.metadata?.team_name;
       if (team && String(team).trim()) return String(team).trim();
@@ -2589,10 +2883,12 @@
       return {
         season,
         week,
-        matchups: sd.matchupsByWeek[week],
+        matchups: championshipMatchups(sd, week, sd.matchupsByWeek[week]),
         rosters: sd.rosters,
         leagueUsers: sd.leagueUsers,
         leagueObj: sd.leagueObj,
+        playoffWeeks: sd.playoffWeeks || [],
+        transactionsByWeek: sd.transactionsByWeek || {},
       };
     }
 
@@ -3419,7 +3715,7 @@
       const waiverAdds = buildWaiverAdds(
         weekEntry.transactionsByWeek || {},
         matchup.roster_id,
-        getRegularSeasonWeeks(weekEntry)
+        getTrackedWeeksForSeason(weekEntry)
       );
       const totalStarterScore = getStarterTotal(matchup);
       const contributors = [];
@@ -4560,8 +4856,12 @@
       const allWeeks = [];
       for (const [season, data] of Object.entries(state.seasonData)) {
         for (const week of data.completedWeeks) {
-          const matchups = data.matchupsByWeek[week];
-          if (!matchups) continue;
+          const matchups = championshipMatchups(
+            data,
+            week,
+            data.matchupsByWeek[week]
+          );
+          if (!matchups.length) continue;
           allWeeks.push({
             season,
             week,
@@ -4573,6 +4873,7 @@
             transactionsByWeek: data.transactionsByWeek || {},
             playoffWeekStart: data.playoffWeekStart ?? data.leagueObj?.playoffWeekStart ?? null,
             regularSeasonWeeks: getRegularSeasonWeeks(data),
+            playoffWeeks: data.playoffWeeks || [],
           });
         }
       }
@@ -5258,7 +5559,7 @@
       const waiverAdds = buildWaiverAdds(
         weekEntry.transactionsByWeek || {},
         matchup.roster_id,
-        getRegularSeasonWeeks(weekEntry)
+        getTrackedWeeksForSeason(weekEntry)
       );
       const contributors = [];
       let draftedTotal = 0;
@@ -5800,8 +6101,10 @@
         return `
         <article class="wall-record-plaque wall-record-plaque--empty${variantClass}">
           <p class="wall-record-plaque-title">${escapeHtml(title)}</p>
-          <p class="wall-record-plaque-value">—</p>
-          <p class="wall-record-plaque-meta">No data yet</p>
+          <div class="wall-record-plaque-body">
+            <p class="wall-record-plaque-value">—</p>
+            <p class="wall-record-plaque-meta">No data yet</p>
+          </div>
           <h3 class="wall-record-plaque-holder">Unclaimed</h3>
         </article>`;
       }
@@ -5810,14 +6113,16 @@
       return `
         <article class="wall-record-plaque${variantClass}">
           <p class="wall-record-plaque-title">${escapeHtml(title)}</p>
-          <p class="wall-record-plaque-value">${escapeHtml(
-            formatWallPlaqueValue(record)
-          )}</p>
-          ${
-            metaLine
-              ? `<p class="wall-record-plaque-meta">${escapeHtml(metaLine)}</p>`
-              : ""
-          }
+          <div class="wall-record-plaque-body">
+            <p class="wall-record-plaque-value">${escapeHtml(
+              formatWallPlaqueValue(record)
+            )}</p>
+            ${
+              metaLine
+                ? `<p class="wall-record-plaque-meta">${escapeHtml(metaLine)}</p>`
+                : ""
+            }
+          </div>
           <h3 class="wall-record-plaque-holder">${escapeHtml(holder)}</h3>
         </article>`;
     }
@@ -6085,6 +6390,7 @@
           const rosters = sd.rosters || [];
           for (const roster of rosters) {
             const rosterId = Number(roster.roster_id);
+            if (!isChampionshipPlayoffRoster(sd, week, rosterId)) continue;
             const ownerId = String(roster.owner_id || rosterId);
             const result = evaluateWeeklyBadges(
               rosterId,
@@ -6175,20 +6481,22 @@
       return state.badgeHistory;
     }
 
-    function filterBadgeHistoryForSeason(history, seasonFilter, weekThrough = null) {
+    function filterBadgeHistoryForSeason(history, seasonFilter, weekThrough = null, predicate = null) {
       if (!history) return null;
       const applySeason = !!(seasonFilter && seasonFilter !== "allTime");
       const applyWeek =
         weekThrough != null &&
         weekThrough !== "season" &&
         Number.isFinite(Number(weekThrough));
-      if (!applySeason && !applyWeek) return history;
+      const applyPred = typeof predicate === "function";
+      if (!applySeason && !applyWeek && !applyPred) return history;
 
       const seasonStr = applySeason ? String(seasonFilter) : null;
       const weekMax = applyWeek ? Number(weekThrough) : null;
       const keepInstance = (inst) => {
         if (seasonStr && String(inst.season) !== seasonStr) return false;
         if (weekMax != null && Number(inst.week) > weekMax) return false;
+        if (applyPred && !predicate(inst)) return false;
         return true;
       };
 
@@ -6972,6 +7280,14 @@
       league_historian: "The Lineup Connoisseur",
       scoring_champion: "Scoring Champion",
     };
+    const TITLE_RACE_SUBTITLES = {
+      apex_predator: "Scoring and matchup dominance",
+      tactician: "Lineup precision & waiver wizardry",
+      golden_child: "Unmatched luck & soft matchups",
+      league_historian: "Rare lineup trivia",
+      tank_commander: "Disastrous performances and idiotic decisions",
+      tragic_hero: "Unlucky breaks & heartbreaking losses",
+    };
 
     const LANDING_TITLE_ORDER = [
       "apex_predator",
@@ -7157,11 +7473,17 @@
       };
     }
 
+    function badgeInstanceCountsTowardTitles(inst) {
+      const sd = state.seasonData?.[String(inst?.season)];
+      return isRegularSeasonWeek(inst?.week, sd?.leagueObj || sd);
+    }
+
     function buildBadgeBeltsStandings(seasonFilter, weekThrough = null) {
       const filtered = filterBadgeHistoryForSeason(
         state.badgeHistory,
         seasonFilter === "allTime" ? "allTime" : seasonFilter,
-        weekThrough
+        weekThrough,
+        badgeInstanceCountsTowardTitles
       );
       const managers = getDecoratedGmManagers(seasonFilter);
       for (const [ownerId] of Object.entries(filtered?.byManager || {})) {
@@ -8282,7 +8604,8 @@
 
       const seasonFilter = state.wallBadgesSeason || "allTime";
       const scope = state.wallBadgesScope === "league" ? "league" : "myTeam";
-      const weekThrough = getDecoratedGmWeekThrough();
+      const weekThrough =
+        seasonFilter === "allTime" ? null : getDecoratedGmWeekThrough();
       const filtered = filterBadgeHistoryForSeason(
         state.badgeHistory,
         seasonFilter === "allTime" ? "allTime" : seasonFilter,
@@ -8507,55 +8830,15 @@
       return state.selectedTab === "hallFame" || state.selectedTab === "hallPain";
     }
 
-    function getHallFameSubtab() {
-      const tab = state.wallOfFameTab;
-      if (tab === "lucks" || tab === "historian") return tab;
-      return "fame";
-    }
-
     function getLegacyActiveTab() {
       isHallTab();
       return state.selectedTab === "hallPain" ? "pain" : "fame";
     }
 
-    function renderHallFameSubtabs(activeTab) {
-      const tabs = [
-        { id: "fame", label: "Fame" },
-        { id: "lucks", label: "Luck" },
-        { id: "historian", label: "Lineup" },
-      ];
-      return `
-        <div class="wall-subtabs lb-scope-bar" role="tablist" aria-label="Hall of Fame">
-          ${tabs
-            .map(
-              (t) =>
-                `<button type="button" class="week-btn ${
-                  activeTab === t.id ? "active" : ""
-                }" data-wall-tab="${t.id}" role="tab" aria-selected="${
-                  activeTab === t.id ? "true" : "false"
-                }">${t.label}</button>`
-            )
-            .join("")}
-        </div>`;
-    }
-
-    function bindHallFameSubtabs(panel) {
-      panel.querySelectorAll("[data-wall-tab]").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const next = btn.dataset.wallTab;
-          if (next !== "fame" && next !== "lucks" && next !== "historian") return;
-          if (state.wallOfFameTab === next) return;
-          state.wallOfFameTab = next;
-          state.expandedBadgeBeltId = null;
-          renderDashboard();
-        });
-      });
-    }
-
     function renderLegacyHallBeltSection(beltIds) {
       if (state.badgeHistoryComputing || !state.badgeHistory) {
         return `
-          <p class="section-label">Belt Title Holders</p>
+          <p class="section-label">Title Holders</p>
           <div class="wall-badges-loading">
             <div class="spinner"></div>
             <p>Computing belt standings…</p>
@@ -8576,7 +8859,7 @@
         .map((belt) => renderBeltCard(belt, expandedId === belt.id))
         .join("");
       return `
-        <p class="section-label">Belt Title Holders</p>
+        <p class="section-label">Title Holders</p>
         <div class="belts-grid legacy-hall-belts">${
           cards || '<p class="metric-sub">No belt standings yet.</p>'
         }</div>
@@ -8586,7 +8869,7 @@
     const PAIN_STAT_DEFS = [
       {
         key: "lowestTeamPoints",
-        title: "Worst Week",
+        title: "Worst Team Performance",
         desc: "Lowest team score in a completed matchup",
         icon: "🪦",
         unit: "pts",
@@ -8924,7 +9207,6 @@
         <article class="pain-tombstone pain-tombstone--empty${variantClass}">
           <p class="pain-tombstone-title">${escapeHtml(title)}</p>
           <p class="pain-tombstone-value">—</p>
-          <p class="pain-tombstone-desc">${escapeHtml(meta.desc || "")}</p>
           <p class="pain-tombstone-meta">No data yet</p>
           <h3 class="pain-tombstone-holder">Unclaimed</h3>
         </article>`;
@@ -8936,7 +9218,6 @@
           <p class="pain-tombstone-value">${escapeHtml(
             formatPainTombstoneValue(meta, record)
           )}</p>
-          <p class="pain-tombstone-desc">${escapeHtml(meta.desc || "")}</p>
           ${
             metaLine
               ? `<p class="pain-tombstone-meta">${escapeHtml(metaLine)}</p>`
@@ -9025,26 +9306,6 @@
     function renderWallOfFame() {
       const panel = $("wall-panel");
       const data = state.recordsAndMilestones;
-      const fameSubtab =
-        state.selectedTab === "hallFame" ? getHallFameSubtab() : null;
-
-      if (fameSubtab === "lucks" || fameSubtab === "historian") {
-        const bodyHtml =
-          fameSubtab === "lucks"
-            ? renderArchivesLuckyBreaksPage()
-            : renderArchivesHistorianPage();
-        panel.innerHTML = `<div class="wall-gallery">${renderHallFameSubtabs(
-          fameSubtab
-        )}${bodyHtml}</div>`;
-        panel.setAttribute(
-          "aria-label",
-          fameSubtab === "lucks" ? "Luck" : "Lineup"
-        );
-        bindHallFameSubtabs(panel);
-        bindLegacyHallInteractions(panel);
-        show(panel);
-        return;
-      }
 
       if (state.recordsComputing || !data) {
         show(panel);
@@ -9053,10 +9314,7 @@
       }
 
       const activeTab = getLegacyActiveTab();
-      if (activeTab === "pain") state.wallOfFameTab = "pain";
-      else if (state.wallOfFameTab !== "lucks" && state.wallOfFameTab !== "historian") {
-        state.wallOfFameTab = "fame";
-      }
+      state.wallOfFameTab = activeTab === "pain" ? "pain" : "fame";
 
       const seasonFilter = getLegacySeasonFilter();
       const isAllTime = seasonFilter === "allTime";
@@ -9111,16 +9369,12 @@
         seasonYear,
         painHtml
       );
-      const subtabsHtml =
-        activeTab === "fame" ? renderHallFameSubtabs("fame") : "";
-
-      panel.innerHTML = `<div class="wall-gallery">${subtabsHtml}${bodyHtml}</div>`;
+      panel.innerHTML = `<div class="wall-gallery">${bodyHtml}</div>`;
       panel.setAttribute(
         "aria-label",
         activeTab === "pain" ? "Hall of Pain" : "Hall of Fame"
       );
 
-      bindHallFameSubtabs(panel);
       bindLegacyHallInteractions(panel);
       show(panel);
     }
@@ -9753,9 +10007,11 @@
         const weekEntry = {
           season: year,
           week,
-          matchups: sd.matchupsByWeek[week],
+          matchups: championshipMatchups(sd, week, sd.matchupsByWeek[week]),
           rosters: sd.rosters,
           leagueUsers: sd.leagueUsers,
+          leagueObj: sd.leagueObj,
+          playoffWeeks: sd.playoffWeeks || [],
           transactionsByWeek: sd.transactionsByWeek || {},
         };
         const leaders = getWeekBountyLeaders(weekEntry, players);
@@ -10026,14 +10282,7 @@
       for (const [season, sd] of Object.entries(state.seasonData || {})) {
         if (Number(season) >= yearNum) continue;
         for (const week of sd.completedWeeks || []) {
-          const weekEntry = {
-            season,
-            week,
-            matchups: sd.matchupsByWeek[week],
-            rosters: sd.rosters,
-            leagueUsers: sd.leagueUsers,
-            transactionsByWeek: sd.transactionsByWeek || {},
-          };
+          const weekEntry = buildRecordWeekEntry(season, week, sd);
           const leaders = getWeekBountyLeaders(weekEntry, players);
           for (const key of BOUNTY_RECORD_KEYS) {
             const leader = leaders[key];
@@ -10167,14 +10416,7 @@
       };
 
       for (const week of weeks) {
-        const weekEntry = {
-          season: year,
-          week,
-          matchups: sd.matchupsByWeek[week],
-          rosters: sd.rosters,
-          leagueUsers: sd.leagueUsers,
-          transactionsByWeek: sd.transactionsByWeek || {},
-        };
+        const weekEntry = buildRecordWeekEntry(year, week, sd);
         const leaders = getWeekBountyLeaders(weekEntry, players);
         weeklyRecords[week] = {};
         const processedStats = new Set();
@@ -11964,6 +12206,39 @@
       </div>`;
     }
 
+    function getMostRecentCollectionWeek() {
+      const found = findLatestSeasonWithCompletedWeeks();
+      if (!found?.weeks?.length) return null;
+      return {
+        season: String(found.year),
+        week: Number(found.weeks[found.weeks.length - 1]),
+      };
+    }
+
+    function collectionFillMatchesRecentWeek(season, week, recent) {
+      if (!recent || week == null || season == null) return false;
+      return (
+        String(season) === String(recent.season) &&
+        Number(week) === Number(recent.week)
+      );
+    }
+
+    function earliestCollectionInstance(instances) {
+      if (!instances?.length) return null;
+      return instances.reduce((best, inst) => {
+        if (!best) return inst;
+        const sy = Number(inst.season);
+        const by = Number(best.season);
+        if (sy < by) return inst;
+        if (sy > by) return best;
+        return Number(inst.week) < Number(best.week) ? inst : best;
+      }, null);
+    }
+
+    function collectionRecentClass(isRecent) {
+      return isRecent ? " collection-cell--recent" : "";
+    }
+
     function getAllPointsRows() {
       const rows = [];
       const row0 = [];
@@ -11978,7 +12253,7 @@
       return rows;
     }
 
-    function renderAllPointsCell(val, achieved, first, counts, colIndex) {
+    function renderAllPointsCell(val, achieved, first, counts, colIndex, recentWeek) {
       if (val == null) {
         return `<div class="allpoints-cell allpoints-cell--blank" aria-hidden="true"></div>`;
       }
@@ -11993,14 +12268,21 @@
       const n = isAchieved ? counts?.get(val) || 1 : 0;
       const colAttr =
         colIndex != null && colIndex >= 0 ? ` data-col="${colIndex}"` : "";
+      const isRecent =
+        isAchieved &&
+        collectionFillMatchesRecentWeek(
+          first.get(val)?.season,
+          first.get(val)?.week,
+          recentWeek
+        );
       return `<div class="allpoints-cell ${
         isAchieved ? "allpoints-cell--achieved" : ""
-      }"${colAttr} data-tooltip="${escapeHtml(tooltip)}"${
+      }${collectionRecentClass(isRecent)}"${colAttr} data-tooltip="${escapeHtml(tooltip)}"${
         isAchieved ? ` data-count="${n}"` : ""
       } title=""></div>`;
     }
 
-    function renderAllPointsPanel(data) {
+    function renderAllPointsPanel(data, recentWeek) {
       const ap = data.allPoints;
       const achieved = ap.achieved;
       const first = ap.firstInstance;
@@ -12019,7 +12301,14 @@
         .map((row) => {
           const cells = row.values
             .map((val, colIndex) =>
-              renderAllPointsCell(val, achieved, first, counts, colIndex)
+              renderAllPointsCell(
+                val,
+                achieved,
+                first,
+                counts,
+                colIndex,
+                recentWeek
+              )
             )
             .join("");
           return `<div class="allpoints-row"><span class="allpoints-row-label">${row.label}</span>${cells}</div>`;
@@ -12034,15 +12323,20 @@
         <div class="allpoints-grid">${headerHtml}${rowsHtml}</div>`;
     }
 
-    function renderSacredScoresPanel(data) {
+    function renderSacredScoresPanel(data, recentWeek) {
       const achieved = data.sacredScores.achieved;
       const count = Object.keys(achieved).length;
 
       const badges = SACRED_SCORES_DEF.map((s) => {
         const hit = achieved[s.score];
         if (hit) {
+          const isRecent = collectionFillMatchesRecentWeek(
+            hit.season,
+            hit.week,
+            recentWeek
+          );
           return `
-            <div class="sacred-badge sacred-badge--achieved">
+            <div class="sacred-badge sacred-badge--achieved${collectionRecentClass(isRecent)}">
               <div class="sacred-badge-score">${s.score}</div>
               <div class="sacred-badge-name">${escapeHtml(s.name)}</div>
               <div class="sacred-badge-detail">${escapeHtml(hit.manager)} · Week ${hit.week} · ${hit.season}</div>
@@ -12064,7 +12358,7 @@
         <div class="sacred-grid">${badges}</div>`;
     }
 
-    function renderWinigamiPanel(data) {
+    function renderWinigamiPanel(data, recentWeek) {
       const w = data.winigami;
       const achievedMap = w.achieved;
       const minScore = w.minScore;
@@ -12111,10 +12405,20 @@
             tooltip = `${score} pts — never a winning score`;
           }
 
+          const firstHit = isAchieved
+            ? earliestCollectionInstance(hit.instances)
+            : null;
+          const isRecent = collectionFillMatchesRecentWeek(
+            firstHit?.season,
+            firstHit?.week,
+            recentWeek
+          );
+
           const cls = [
             "winigami-cell",
             isAchieved ? "winigami-cell--achieved" : "",
             isNewTerritory ? "winigami-cell--new" : "",
+            isRecent ? "collection-cell--recent" : "",
           ]
             .filter(Boolean)
             .join(" ");
@@ -12229,7 +12533,7 @@
         ${expandedHtml}`;
     }
 
-    function renderNflMvpPanel(data) {
+    function renderNflMvpPanel(data, recentWeek) {
       const achieved = data.nflTeamMvp.achieved;
       const count = achieved.size;
 
@@ -12255,7 +12559,15 @@
           } else {
             tooltip = `${team.name}\nNo weekly high scorer yet`;
           }
-          gridHtml += `<div class="nfl-mvp-cell ${isAchieved ? "nfl-mvp-cell--achieved" : ""}"${
+          const firstHit = isAchieved
+            ? earliestCollectionInstance(instances)
+            : null;
+          const isRecent = collectionFillMatchesRecentWeek(
+            firstHit?.season,
+            firstHit?.week,
+            recentWeek
+          );
+          gridHtml += `<div class="nfl-mvp-cell ${isAchieved ? "nfl-mvp-cell--achieved" : ""}${collectionRecentClass(isRecent)}"${
             isAchieved ? ` data-count="${instances.length}"` : ""
           } data-tooltip="${escapeHtml(tooltip)}">${team.abbr}</div>`;
         }
@@ -12281,155 +12593,17 @@
         </div>`;
     }
 
-    function getArchiveBelt(beltId) {
-      const seasonFilter = getLegacySeasonFilter();
-      const weekThrough = getLegacyWeekThrough(seasonFilter);
-      const { belts } = buildBadgeBeltsStandings(seasonFilter, weekThrough);
-      return (belts || []).find((b) => b.id === beltId) || null;
-    }
-
-    function formatArchiveWeekLabel(rec) {
-      if (!rec) return "";
-      const week = rec.week != null ? `Week ${rec.week}` : "";
-      const season = rec.season != null ? String(rec.season) : "";
-      return [week, season].filter(Boolean).join(" · ");
-    }
-
-    function computeLuckyBreakLeagueStats(seasonFilter = "allTime") {
-      const weekThrough = getLegacyWeekThrough(seasonFilter);
-      const history = (buildCompleteLeagueHistory() || []).slice().sort(
-        (a, b) => Number(a.season) - Number(b.season) || Number(a.week) - Number(b.week)
-      );
-      let lowestWin = null;
-      let narrowest = null;
-      for (const weekEntry of history) {
-        if (
-          seasonFilter &&
-          seasonFilter !== "allTime" &&
-          String(weekEntry.season) !== String(seasonFilter)
-        ) {
-          continue;
-        }
-        if (
-          weekThrough != null &&
-          Number(weekEntry.week) > Number(weekThrough)
-        ) {
-          continue;
-        }
-        for (const [a, b] of pairWeekMatchups(weekEntry.matchups)) {
-          const scoreA = getTeamScore(a);
-          const scoreB = getTeamScore(b);
-          if (!(scoreA > scoreB) && !(scoreB > scoreA)) continue;
-          const winner = scoreA > scoreB ? a : b;
-          const wScore = Math.max(scoreA, scoreB);
-          const margin = Math.abs(scoreA - scoreB);
-          const rec = {
-            score: wScore,
-            margin,
-            rosterId: winner.roster_id,
-            ownerId: String(
-              ownerIdForRoster(weekEntry.rosters, winner.roster_id) ||
-                winner.roster_id
-            ),
-            managerName: managerNameForWeek(weekEntry, winner.roster_id),
-            week: weekEntry.week,
-            season: weekEntry.season,
-          };
-          if (!lowestWin || wScore < lowestWin.score - 1e-9) lowestWin = rec;
-          if (!narrowest || margin < narrowest.margin - 1e-9) narrowest = rec;
-        }
-      }
-      return { lowestWin, narrowest };
-    }
-
-    function renderArchivesLuckyStatCard(title, rec, valueHtml) {
-      if (!rec) {
-        return `
-          <article class="archive-stat-card">
-            <p class="archive-stat-label">${escapeHtml(title)}</p>
-            <p class="archive-stat-value">—</p>
-            <p class="archive-stat-meta">No completed matchups yet</p>
-          </article>`;
-      }
-      return `
-        <article class="archive-stat-card">
-          <p class="archive-stat-label">${escapeHtml(title)}</p>
-          <p class="archive-stat-value">${valueHtml}</p>
-          <p class="archive-stat-mgr">${escapeHtml(rec.managerName)}</p>
-          <p class="archive-stat-meta">${escapeHtml(formatArchiveWeekLabel(rec))}</p>
-        </article>`;
-    }
-
-    function renderArchivesLuckyBreaksPage() {
-      if (state.badgeHistoryComputing || !state.badgeHistory) {
-        return `
-          <div class="wall-badges-loading">
-            <div class="spinner"></div>
-            <p>Computing belt standings…</p>
-            <p class="metric-sub">${escapeHtml(
-              state.badgeHistoryProgress || "This may take a moment"
-            )}</p>
-          </div>`;
-      }
-      const belt = getArchiveBelt("golden_child");
-      if (!belt) {
-        return `<p class="metric-sub">No belt standings yet.</p>`;
-      }
-      const stats = computeLuckyBreakLeagueStats(getLegacySeasonFilter());
-      return `
-        <div class="archive-luck-showcase">
-          <div class="belts-grid">${renderBeltCard(belt, true)}</div>
-          ${renderBeltDrawer(belt)}
-          <section class="archive-section">
-            <h3 class="archive-section-title">Key Lucky Stats</h3>
-            <div class="archive-stat-grid">
-              ${renderArchivesLuckyStatCard(
-                "Lowest points in a win",
-                stats.lowestWin,
-                stats.lowestWin ? `${stats.lowestWin.score.toFixed(1)} pts` : "—"
-              )}
-              ${renderArchivesLuckyStatCard(
-                "Narrowest margin of victory",
-                stats.narrowest,
-                stats.narrowest ? `${stats.narrowest.margin.toFixed(2)} pts` : "—"
-              )}
-            </div>
-          </section>
-        </div>`;
-    }
-
-    function renderArchivesHistorianPage() {
-      if (state.badgeHistoryComputing || !state.badgeHistory) {
-        return `
-          <div class="wall-badges-loading">
-            <div class="spinner"></div>
-            <p>Computing belt standings…</p>
-            <p class="metric-sub">${escapeHtml(
-              state.badgeHistoryProgress || "This may take a moment"
-            )}</p>
-          </div>`;
-      }
-      const belt = getArchiveBelt("league_historian");
-      if (!belt) {
-        return `<p class="metric-sub">No belt standings yet.</p>`;
-      }
-      return `
-        <div class="archive-historian-showcase">
-          <div class="belts-grid">${renderBeltCard(belt, true)}</div>
-          ${renderBeltDrawer(belt)}
-        </div>`;
-    }
-
     function renderLeagueCollectionsBody() {
       const data = state.leagueCollections;
       if (state.collectionsComputing || !data) return "";
+      const recentWeek = getMostRecentCollectionWeek();
       return `
         <div class="collections-binder">
         <p class="collections-overall">Overall completion: <strong>${data.overallCompletionPct.toFixed(1)}%</strong> across all collections</p>
-        ${renderCollectionPanel("allpoints", "AllPoints", "collection-panel--allpoints", renderAllPointsPanel(data))}
-        ${renderCollectionPanel("winigami", "Winigami", "collection-panel--winigami", renderWinigamiPanel(data))}
-        ${renderCollectionPanel("nflmvp", "Highest Weekly Scorer — Every NFL Team", "collection-panel--nfl", renderNflMvpPanel(data))}
-        ${renderCollectionPanel("sacred", "Sacred Scores", "collection-panel--sacred", renderSacredScoresPanel(data))}
+        ${renderCollectionPanel("allpoints", "AllPoints", "collection-panel--allpoints", renderAllPointsPanel(data, recentWeek))}
+        ${renderCollectionPanel("winigami", "Winigami", "collection-panel--winigami", renderWinigamiPanel(data, recentWeek))}
+        ${renderCollectionPanel("nflmvp", "Highest Weekly Scorer — Every NFL Team", "collection-panel--nfl", renderNflMvpPanel(data, recentWeek))}
+        ${renderCollectionPanel("sacred", "Sacred Scores", "collection-panel--sacred", renderSacredScoresPanel(data, recentWeek))}
         </div>`;
     }
 
@@ -12974,6 +13148,14 @@
       const triggered = [];
       const players = state.players;
       const byePlayerSet = options.byePlayerSet || new Set();
+      const seasonYear = String(
+        seasonData?.leagueObj?.season || state.selectedSeason || ""
+      );
+      // Withhold all weekly badges until every NFL game that week is finished.
+      // Incomplete weeks are also omitted from completedWeeks; this is a second gate.
+      if (!isNflWeekFullyComplete(seasonYear, week)) {
+        return { displayed: [], all: [], context: null };
+      }
       const matchups = getWeekMatchups(seasonData, week);
       if (!matchups?.length) {
         return { displayed: [], all: [], context: null };
@@ -13050,7 +13232,6 @@
       const histTeam = getHistoricalTeamScores();
       const teamPct = percentileOfValue([...histTeam].sort((a, b) => a - b), myScore);
       const teamRank = rankDescending(histTeam, myScore);
-      const seasonYear = String(seasonData.leagueObj?.season || state.selectedSeason);
 
       const streak = getConsecutiveStreakForManager(rosterId, week, seasonData);
       const seasonRecord = getManagerSeasonRecordThroughWeek(rosterId, week, seasonData);
@@ -13234,6 +13415,13 @@
       }
 
       if (lost && oppRank >= teamCount - 2 && oppRank > 0) {
+        const lowestFromBottom = teamCount - oppRank + 1;
+        const oppLowestPhrase =
+          formatRankedWithArticle(
+            lowestFromBottom,
+            "lowest-scoring",
+            "team this week"
+          ) || "the lowest-scoring team this week";
         triggered.push(
           makeBadge({
             id: "robbery",
@@ -13242,9 +13430,7 @@
             tier: "badge",
             category: BADGE_CATEGORIES.matchup,
             priority: 2,
-            dataLines: [
-              "Squandered opportunity — Lost to one of the lowest-scoring teams this week",
-            ],
+            dataLines: [`Lost to ${oppLowestPhrase}`],
             borderColor: "var(--danger)",
             isShame: false,
           })
@@ -13310,8 +13496,7 @@
       if (
         won &&
         Number.isFinite(winMargin) &&
-        winMargin >= 50 &&
-        isRegularSeasonWeek(week, seasonData.leagueObj)
+        winMargin >= 50
       ) {
         triggered.push(
           makeBadge({
@@ -13395,7 +13580,9 @@
             category: BADGE_CATEGORIES.lineup,
             priority: 3,
             dataLines: [
-              `Elite lineup efficiency. Only ${leftOnBench.toFixed(1)} pts left on your bench`,
+              leftOnBench.toFixed(1) === "0.0"
+                ? `Elite lineup efficiency. ${leftOnBench.toFixed(1)} pts left on your bench`
+                : `Elite lineup efficiency. Only ${leftOnBench.toFixed(1)} pts left on your bench`,
             ],
             borderColor: "#8b9cb3",
           })
@@ -13445,6 +13632,13 @@
       }
 
       if (teamPct <= 10 && myScore > 0) {
+        const lowestHistRank = rankAscending(histTeam, myScore);
+        const dumpsterRankLine =
+          Number.isFinite(lowestHistRank) && lowestHistRank >= 1
+            ? lowestHistRank === 1
+              ? "Lowest score in league history"
+              : `${formatOrdinal(lowestHistRank)} lowest score in league history`
+            : "One of the lowest team outputs in league history";
         triggered.push(
           makeBadge({
             id: "ghost",
@@ -13454,7 +13648,7 @@
             category: BADGE_CATEGORIES.scoring,
             priority: 3,
             dataLines: [
-              `${myScore.toFixed(2)} team pts — One of the lowest team outputs in league history`,
+              `${myScore.toFixed(2)} team pts — ${dumpsterRankLine}`,
             ],
             borderColor: "var(--danger)",
             isShame: true,
@@ -13557,7 +13751,7 @@
       const starterTotal = starterRows.reduce((s, p) => s + p.pts, 0) || myScore;
 
       // ── Triple Threat: starter QB + RB + WR each scored 20+ ────────────────
-      if (isRegularSeasonWeek(week, seasonData.leagueObj)) {
+      {
         const pickBestAt = (pos) =>
           starterRows
             .filter(
@@ -13818,7 +14012,7 @@
             category: BADGE_CATEGORIES.lineup,
             priority: 3,
             dataLines: [
-              `Started ${favNumber.players.length} players wearing #${favNumber.number}`,
+              `Started ${favNumber.players.length} players wearing the same number`,
               `${nameList} all wear #${favNumber.number}`,
             ],
             borderColor: "#8b9cb3",
@@ -13834,8 +14028,20 @@
           !byePlayerSet.has(p.id)
       );
       if (zeroStarters.length) {
-        const names = zeroStarters.map((p) => p.name);
-        const nameList = formatPlayerNameList(names);
+        const isDefenseZero = (p) =>
+          p.pos === "DEF" || isDefUnit(p.id);
+        const defZeros = zeroStarters.filter(isDefenseZero);
+        const skillZeros = zeroStarters.filter((p) => !isDefenseZero(p));
+        const dataLines = [];
+        if (skillZeros.length) {
+          const nameList = formatPlayerNameList(skillZeros.map((p) => p.name));
+          const verb = skillZeros.length === 1 ? "was" : "were";
+          dataLines.push(`${nameList} ${verb} doing cardio out there`);
+        }
+        if (defZeros.length) {
+          const nameList = formatPlayerNameList(defZeros.map((p) => p.name));
+          dataLines.push(`${nameList} put up 0 in your starting lineup`);
+        }
         triggered.push(
           makeBadge({
             id: "donutBoy",
@@ -13845,9 +14051,7 @@
             tier: "badge",
             category: BADGE_CATEGORIES.lineup,
             priority: 3,
-            dataLines: [
-              `${nameList} put up 0 in your starting lineup`,
-            ],
+            dataLines,
             borderColor: "var(--danger)",
             isShame: true,
           })
@@ -13983,9 +14187,6 @@
                       priority: 4,
                       dataLines: [
                         `${lineupStreak} consecutive weeks with the same lineup`,
-                        `Identical lineup running since Week ${
-                          weekNum - lineupStreak + 1
-                        }`,
                         namePreview ||
                           "Same starters, same week, same result incoming",
                       ],
@@ -14014,7 +14215,7 @@
             category: BADGE_CATEGORIES.lineup,
             priority: 2,
             dataLines: [
-              `${worst.name} scored ${worst.pts.toFixed(1)} pts — You really hate to see it`,
+              `${worst.name} scored ${worst.pts.toFixed(1)} pts — An empty slot would have been better`,
             ],
             borderColor: "var(--danger)",
             isShame: true,
@@ -15001,7 +15202,7 @@
                 category: BADGE_CATEGORIES.weather,
                 priority: 4,
                 dataLines: [
-                  `Your starters played in temperatures from ${coldF}°F to ${hotF}°F — a ${Math.round(swing)}°F swing.`,
+                  `Two starters played in a ${Math.round(swing)}°F temperature swing`,
                   `Coldest: ${coldestStarter.name} (${coldF}°F) · Hottest: ${warmestStarter.name} (${hotF}°F)`,
                 ],
                 borderColor: "#8b9cb3",
@@ -15175,6 +15376,10 @@
             );
           }
         }
+      }
+
+      if (!isChampionshipPlayoffRoster(seasonData, week, rosterId)) {
+        triggered.length = 0;
       }
 
       if (!options.skipOccurrenceAnnotation) {
@@ -15386,8 +15591,7 @@
         title: "Luck",
         icon: "🍀",
         viewAllLabel: "View All Luck",
-        viewAll: "wall",
-        viewAllTab: "lucks",
+        viewAll: "achievements",
         compact: true,
         categoryIds: ["golden_child"],
       },
@@ -15396,8 +15600,7 @@
         title: "Lineup",
         icon: "💡",
         viewAllLabel: "View All Lineup",
-        viewAll: "wall",
-        viewAllTab: "historian",
+        viewAll: "achievements",
         categoryIds: ["league_historian"],
       },
       {
@@ -15494,7 +15697,8 @@
             l &&
             !/\d+(?:st|nd|rd|th)\s+occurrence this season/i.test(l) &&
             !/^Previous record/i.test(l) &&
-            !/^First mark in league history/i.test(l)
+            !/^First mark in league history/i.test(l) &&
+            !/^Identical lineup running since/i.test(l)
         );
       const out = [];
       for (const line of lines) {
@@ -15575,13 +15779,15 @@
           <p class="yw-record-plaque-title">${escapeHtml(
             String(categoryTitle || "").toUpperCase()
           )}</p>
-          <p class="yw-record-plaque-value">${escapeHtml(pts)}</p>
-          ${
-            detailLine
-              ? `<p class="yw-record-plaque-meta">${escapeHtml(detailLine)}</p>`
-              : ""
-          }
-          <p class="yw-record-plaque-tier">${escapeHtml(tierLabel)}</p>
+          <div class="yw-record-plaque-body">
+            <p class="yw-record-plaque-value">${escapeHtml(pts)}</p>
+            ${
+              detailLine
+                ? `<p class="yw-record-plaque-meta">${escapeHtml(detailLine)}</p>`
+                : ""
+            }
+          </div>
+          <p class="yw-record-plaque-tier"><span class="plaque-bottom-label">${escapeHtml(tierLabel)}</span></p>
         </article>`;
     }
 
@@ -16000,6 +16206,13 @@
       week,
       rosterId
     ) {
+      const sd = state.seasonData?.[String(seasonYear)];
+      if (isEliminatedFromChampionship(sd, week, rosterId)) {
+        return `
+        <section class="your-week-section">
+          <p class="yw-empty">Eliminated from Playoffs - No Badges Will Generate</p>
+        </section>`;
+      }
       const visible = (badges || []).filter((b) => !b.hidden);
       const regular = sortYourWeekAccomplishments(
         visible.filter((b) => !isScoringTitleBadge(b))
@@ -16332,33 +16545,55 @@
         rankMod = myRank <= 3 ? "top" : "chase";
       }
 
-      const rival = holdsBelt
-        ? (rows || [])
-            .filter(
-              (r) =>
-                String(r.ownerId) !== String(ownerId) &&
-                Number(r.total) < myTotal
-            )
-            .sort((a, b) => Number(b.total) - Number(a.total))[0] || null
-        : topTotal > 0
+      const chaseLeader =
+        !holdsBelt && topTotal > 0
           ? holders.find((h) => String(h.ownerId) !== String(ownerId)) ||
             holders[0] ||
             null
           : null;
-      const rivalTotal = rival ? Number(rival.total) || 0 : 0;
-      const rivalName = rival?.name || "";
-      const barMax = Math.max(topTotal, myTotal, rivalTotal, 1);
-      const youPct = Math.max(0, Math.min(100, (myTotal / barMax) * 100));
-      const fillPct = youPct;
-      const basePct = Math.max(0, Math.min(100, (prevMyTotal / barMax) * 100));
-      const gainPct =
-        weeklyDelta > 0
-          ? Math.max(0, Math.min(100, (weeklyDelta / barMax) * 100))
-          : 0;
-      const rivalPct =
-        rival && rivalName
-          ? Math.max(0, Math.min(100, (rivalTotal / barMax) * 100))
+      const secondPlace =
+        holdsBelt
+          ? (rows || [])
+              .filter(
+                (r) =>
+                  String(r.ownerId) !== String(ownerId) &&
+                  Number(r.total) < myTotal
+              )
+              .sort(
+                (a, b) =>
+                  Number(b.total) - Number(a.total) ||
+                  Number(a.rank) - Number(b.rank)
+              )[0] || null
           : null;
+      const pillRow = chaseLeader || secondPlace || null;
+      const pillTotal = pillRow ? Number(pillRow.total) || 0 : 0;
+      const pillName = pillRow?.name || "";
+      const barMax = Math.max(topTotal, myTotal, pillTotal, 1);
+      const youPct = Math.max(0, Math.min(100, (myTotal / barMax) * 100));
+      const pillPct =
+        pillRow && pillName
+          ? Math.max(0, Math.min(100, (pillTotal / barMax) * 100))
+          : null;
+      const isYouLeader = holdsBelt;
+      const isAhead = isYouLeader && pillPct != null && youPct > pillPct + 0.15;
+      const isBehind =
+        !isYouLeader && pillPct != null && pillPct > youPct + 0.15;
+      const fillPct = isAhead ? pillPct : youPct;
+      const chaseLeft = isAhead ? pillPct : youPct;
+      const chasePct = isAhead
+        ? youPct - pillPct
+        : isBehind
+          ? pillPct - youPct
+          : 0;
+      const gapBadges = isAhead
+        ? Math.max(0, myTotal - pillTotal)
+        : isBehind
+          ? Math.max(0, pillTotal - myTotal)
+          : 0;
+      const gapLabel =
+        gapBadges > 0
+          ? `${gapBadges} ${isAhead ? "ahead" : "behind"}`
+          : "";
       const deltaUnit = weeklyDelta === 1 ? "Badge" : "Badges";
       const deltaLabel =
         valence === "negative"
@@ -16370,9 +16605,9 @@
               deltaLabel
             )}</span>`
           : "";
-      const rivalTip = holdsBelt
-        ? `Closest chaser: ${rivalName} (${rivalTotal})`
-        : `Current Leader: ${rivalName} (${rivalTotal})`;
+      const pillTip = isYouLeader
+        ? `2nd place: ${pillName} (${pillTotal})`
+        : `Current Leader: ${pillName} (${pillTotal})`;
       const youEdgeClass =
         youPct >= 82
           ? " yw-belt-race-marker--you-end"
@@ -16380,9 +16615,9 @@
             ? " yw-belt-race-marker--you-start"
             : "";
       const pillEdgeClass =
-        rivalPct != null && rivalPct >= 82
+        pillPct != null && pillPct >= 82
           ? " yw-belt-race-marker--pill-end"
-          : rivalPct != null && rivalPct <= 18
+          : pillPct != null && pillPct <= 18
             ? " yw-belt-race-marker--pill-start"
             : "";
 
@@ -16401,19 +16636,32 @@
       const badgeCountHtml = (n) =>
         `<span class="yw-belt-race-count">${escapeHtml(String(n))}</span>`;
       const rivalPillHtml =
-        rival && rivalPct != null && rivalName
-          ? `<span class="yw-belt-race-marker yw-belt-race-marker--pill${pillEdgeClass}" style="left: ${rivalPct.toFixed(
+        pillRow && pillPct != null && pillName
+          ? `<span class="yw-belt-race-marker yw-belt-race-marker--pill${
+              isYouLeader
+                ? " yw-belt-race-marker--chase"
+                : " yw-belt-race-marker--leader"
+            }${pillEdgeClass}" style="left: ${pillPct.toFixed(
               1
             )}%" title="${escapeHtml(
-              rivalName
+              pillName
             )}" data-yw-marker-name="${escapeHtml(
-              rivalTip
+              pillTip
             )}" data-tooltip="${escapeHtml(
-              rivalTip
-            )}"><span class="yw-belt-race-pill-name">${escapeHtml(
-              rivalName
-            )}</span>${badgeCountHtml(rivalTotal)}</span>`
+              pillTip
+            )}"><span class="yw-belt-race-pill-name"><span class="yw-belt-race-pill-user">${escapeHtml(
+              pillName
+            )}</span></span>${badgeCountHtml(pillTotal)}</span>`
           : "";
+      const gapMidPct =
+        pillPct != null ? (youPct + pillPct) / 2 : youPct;
+      const gapHtml =
+        gapLabel && chasePct > 14
+          ? `<span class="yw-belt-race-gap" style="left: ${gapMidPct.toFixed(
+              1
+            )}%">${escapeHtml(gapLabel)}</span>`
+          : "";
+      const youLeadClass = isYouLeader ? " yw-belt-race-marker--you-lead" : "";
 
       return `
         <button type="button" class="yw-belt-track yw-belt-track--${rowMod}${
@@ -16426,16 +16674,29 @@
           `${belt.name}: ${rankLabel}. You: ${myTotal}${
             weeklyDelta > 0 ? `. +${weeklyDelta} this week` : ""
           }${
-            rival && rivalName ? `. ${rivalName}: ${rivalTotal}` : ""
+            pillName
+              ? `. ${isYouLeader ? "2nd" : "Leader"}: ${pillName} (${pillTotal})`
+              : ""
           }.`
         )}">
           <div class="yw-belt-track-head">
             <span class="yw-belt-track-belt">
-              <span class="yw-belt-track-name">${escapeHtml(belt.name)}</span>
-              <span class="yw-belt-track-icon" aria-hidden="true">${icon}</span>
-              <span class="yw-belt-rank yw-belt-rank--${rankMod}${holderAlert}${holderBoost}">${escapeHtml(
-                rankLabel
-              )}</span>
+              <span class="yw-belt-track-title">
+                <span class="yw-belt-track-name-row">
+                  <span class="yw-belt-track-name">${escapeHtml(belt.name)}</span>
+                  <span class="yw-belt-track-icon" aria-hidden="true">${icon}</span>
+                  <span class="yw-belt-rank yw-belt-rank--${rankMod}${holderAlert}${holderBoost}">${escapeHtml(
+                    rankLabel
+                  )}</span>
+                </span>
+                ${
+                  TITLE_RACE_SUBTITLES[belt.id]
+                    ? `<span class="yw-belt-track-hint">${escapeHtml(
+                        TITLE_RACE_SUBTITLES[belt.id]
+                      )}</span>`
+                    : ""
+                }
+              </span>
             </span>
             <span class="yw-belt-track-chips">
               ${deltaChip}
@@ -16454,16 +16715,17 @@
                     : ""
                 }
                 ${
-                  gainPct > 0.15
-                    ? `<span class="yw-belt-race-gain" style="left: ${basePct.toFixed(
+                  chasePct > 0.15
+                    ? `<span class="yw-belt-race-chase" style="left: ${chaseLeft.toFixed(
                         2
-                      )}%; width: ${gainPct.toFixed(2)}%"></span>`
+                      )}%; width: ${chasePct.toFixed(2)}%"></span>`
                     : ""
                 }
               </div>
               <div class="yw-belt-race-marks">
               ${rivalPillHtml}
-              <span class="yw-belt-race-marker yw-belt-race-marker--you${youEdgeClass}" style="left: ${youPct.toFixed(
+              ${gapHtml}
+              <span class="yw-belt-race-marker yw-belt-race-marker--you${youLeadClass}${youEdgeClass}" style="left: ${youPct.toFixed(
                 1
               )}%"><span class="yw-belt-race-you-label">YOU</span>${badgeCountHtml(
                 myTotal
@@ -16478,7 +16740,8 @@
       if (!beltsReady) {
         return `
         <section class="your-week-section yw-moves-section">
-          <h3 class="your-week-section-title">Title Board</h3>
+          <h3 class="your-week-section-title">Title Race</h3>
+          <p class="yw-moves-sub">Earn the most total badges in a category to claim its title. Every title tells a story - not all are honorable.</p>
           <p class="yw-empty">Belt standings are still loading…</p>
         </section>`;
       }
@@ -16512,13 +16775,15 @@
       if (!fameRows && !painRows) {
         return `
         <section class="your-week-section yw-moves-section">
-          <h3 class="your-week-section-title">Title Board</h3>
+          <h3 class="your-week-section-title">Title Race</h3>
+          <p class="yw-moves-sub">Earn the most total badges in a category to claim its title. Every title tells a story - not all are honorable.</p>
           <p class="yw-empty">No belt standings yet.</p>
         </section>`;
       }
       return `
         <section class="your-week-section yw-moves-section">
-          <h3 class="your-week-section-title">Title Board</h3>
+          <h3 class="your-week-section-title">Title Race</h3>
+          <p class="yw-moves-sub">Earn the most total badges in a category to claim its title. Every title tells a story - not all are honorable.</p>
           <div class="yw-belt-tracker">
             ${fameRows ? `<div class="yw-belt-group">${fameRows}</div>` : ""}
             ${painRows ? `<div class="yw-belt-group">${painRows}</div>` : ""}
@@ -16968,9 +17233,6 @@
           const bucket = YOUR_WEEK_BUCKETS.find((b) => b.id === bucketId);
           if (bucket?.viewAll === "achievements") {
             state.selectedTab = "achievements";
-          } else if (bucket?.viewAll === "wall") {
-            state.selectedTab = "hallFame";
-            state.wallOfFameTab = bucket.viewAllTab || "fame";
           } else {
             state.selectedTab = "hallFame";
             state.wallOfFameTab = "fame";
@@ -17047,15 +17309,12 @@
         return;
       }
 
-      // Title / league / week live in #dash-title + #dash-meta — do not duplicate here.
+      // Title Race cards carry their own headings.
 
       let week = state.yourWeekWeek != null ? Number(state.yourWeekWeek) : null;
       if (week == null || !completed.includes(week)) {
         week = fallback?.year === seasonYear ? fallback.week : completed[completed.length - 1];
-        const lastReg = getRegularSeasonWeeks(sd).slice(-1)[0];
-        if (fallback?.year === seasonYear && completed.includes(lastReg)) {
-          week = lastReg;
-        } else if (!completed.includes(week)) {
+        if (!completed.includes(week)) {
           week = completed[completed.length - 1];
         }
         state.yourWeekWeek = week;
@@ -17123,6 +17382,7 @@
     }
 
 
+    /** Single shared page nav for Your Week, both halls, Badge History, and Collections. */
     function renderDashNav() {
       const nav = $("dash-nav");
       if (!nav) return;
@@ -17136,7 +17396,7 @@
       nav.innerHTML = tabs
         .map(
           (t) =>
-            `<button type="button" class="week-btn ${state.selectedTab === t.id ? "active" : ""}" data-tab="${t.id}">${t.label}</button>`
+            `<button type="button" class="dash-nav-tab${state.selectedTab === t.id ? " active" : ""}" data-tab="${t.id}" role="tab" aria-selected="${state.selectedTab === t.id ? "true" : "false"}">${t.label}</button>`
         )
         .join("");
       nav.querySelectorAll("[data-tab]").forEach((btn) => {
@@ -17148,6 +17408,10 @@
           if (state.selectedTab === "hallPain") state.wallOfFameTab = "pain";
           renderDashboard();
         });
+      });
+      nav.querySelector(".dash-nav-tab.active")?.scrollIntoView({
+        inline: "nearest",
+        block: "nearest",
       });
     }
 
@@ -17598,27 +17862,6 @@
     }
 
     function renderDashboardBody() {
-      const onYourWeek = state.selectedTab === "yourWeek";
-      const weekLabel =
-        onYourWeek && state.yourWeekWeek != null
-          ? `Week ${state.yourWeekWeek}`
-          : isHallTab()
-            ? getLegacySeasonFilter() === "allTime"
-              ? "All-Time"
-              : String(getLegacySeasonFilter())
-            : state.selectedTab === "collections"
-              ? "All-Time"
-              : state.selectedWeek === "season"
-                ? "Full Season"
-                : `Week ${state.selectedWeek}`;
-
-      $("dash-meta").textContent = onYourWeek
-        ? `${state.user.display_name || state.user.username} · ${state.league.name}${
-            state.yourWeekSeason || state.league.season
-              ? ` · ${state.yourWeekSeason || state.league.season}`
-              : ""
-          }`
-        : `${state.user.display_name || state.user.username} · ${state.league.name} · ${weekLabel}`;
       renderDashNav();
 
       const yourWeekPanel = $("your-week-panel");
@@ -17644,27 +17887,10 @@
       renderWeekBar();
       renderDashUserSelect();
 
-      $("dash-title").textContent =
-        state.selectedTab === "yourWeek"
-          ? "Your Week"
-          : state.selectedTab === "hallFame"
-            ? "Hall of Fame"
-            : state.selectedTab === "hallPain"
-              ? "Hall of Pain"
-              : state.selectedTab === "collections"
-                ? "League Collections"
-                : state.selectedTab === "achievements"
-                  ? "Badge History"
-                  : "Your Week";
-
-      const hallLuckOrLineup =
-        state.selectedTab === "hallFame" &&
-        (state.wallOfFameTab === "lucks" || state.wallOfFameTab === "historian");
       if (
         (state.recordsComputing || state.collectionsComputing) &&
         state.selectedTab !== "yourWeek" &&
-        state.selectedTab !== "achievements" &&
-        !hallLuckOrLineup
+        state.selectedTab !== "achievements"
       ) {
         show(loadingEl);
       } else {
@@ -17739,7 +17965,8 @@
     }
 
     function dashSelectHtml(id, ariaLabel, optionsHtml) {
-      return `<label class="dash-select-wrap"><select class="dash-select" id="${id}" aria-label="${ariaLabel}">${optionsHtml}</select></label>`;
+      const label = escapeHtml(String(ariaLabel || ""));
+      return `<label class="dash-select-wrap"><select class="dash-select" id="${id}" aria-label="${label}">${optionsHtml}</select></label>`;
     }
 
     function getBadgeHistoryWeekList(seasonFilter) {
@@ -17760,12 +17987,16 @@
     function applyBadgeHistorySeason(value) {
       state.wallBadgesSeason = value;
       state.wallBadgesFlippedKey = null;
-      const weeks = getBadgeHistoryWeekList(value);
-      if (
-        state.selectedWeek !== "season" &&
-        !weeks.includes(Number(state.selectedWeek))
-      ) {
+      if (value === "allTime") {
         state.selectedWeek = "season";
+      } else {
+        const weeks = getBadgeHistoryWeekList(value);
+        if (
+          state.selectedWeek !== "season" &&
+          !weeks.includes(Number(state.selectedWeek))
+        ) {
+          state.selectedWeek = "season";
+        }
       }
       renderDashboard();
     }
@@ -17866,19 +18097,28 @@
         );
         const weekList = getBadgeHistoryWeekList(seasonFilter);
         const activeWeek = state.selectedWeek;
-        const weekHtml = dashSelectHtml(
-          "badge-history-week-select",
-          "Week",
-          [
-            `<option value="season"${
-              activeWeek === "season" || activeWeek == null ? " selected" : ""
-            }>Full Season</option>`,
-            ...weekList.map((w) => {
-              const sel = Number(activeWeek) === Number(w) ? " selected" : "";
-              return `<option value="${w}"${sel}>Week ${w}</option>`;
-            }),
-          ].join("")
-        );
+        const weekSelected =
+          activeWeek === "season" || activeWeek == null
+            ? "Full Season"
+            : Number.isFinite(Number(activeWeek))
+              ? `Week ${Number(activeWeek)}`
+              : "Week";
+        const weekHtml =
+          seasonFilter === "allTime"
+            ? ""
+            : dashSelectHtml(
+                "badge-history-week-select",
+                weekSelected,
+                [
+                  `<option value="season"${
+                    activeWeek === "season" || activeWeek == null ? " selected" : ""
+                  }>Full Season</option>`,
+                  ...weekList.map((w) => {
+                    const sel = Number(activeWeek) === Number(w) ? " selected" : "";
+                    return `<option value="${w}"${sel}>Week ${w}</option>`;
+                  }),
+                ].join("")
+              );
         bar.innerHTML = seasonHtml + weekHtml;
         bar
           .querySelector("#badge-history-season-select")
@@ -17931,9 +18171,12 @@
                   .join("")
               )
             : "";
+        const weekFace = Number.isFinite(activeWeek)
+          ? `Week ${activeWeek}`
+          : "Week";
         const weekHtml = dashSelectHtml(
           "your-week-week-select",
-          "Week",
+          weekFace,
           weekList
             .map((w) => {
               const sel = Number(activeWeek) === Number(w) ? " selected" : "";
@@ -18114,7 +18357,6 @@
         state.yourWeekManagerList = null;
         state.yourWeekManagerListYear = null;
         state.yourWeekBadgesOpen = false;
-        $("dash-title").textContent = "Your Week";
         setView("dashboard");
         renderDashboard();
       } catch (err) {
@@ -18143,13 +18385,11 @@
         }
         state.user = user;
 
-        const leagues = await fetchJSON(
-          `${API}/user/${user.user_id}/leagues/nfl/${SEASON}`
-        );
+        const { leagues, seasonYear } = await fetchUserNflLeagues(user.user_id);
 
         if (!leagues || leagues.length === 0) {
           hideInlineLoading();
-          showError(`No NFL ${SEASON} leagues found for this user.`);
+          showError(`No NFL ${seasonYear} leagues found for this user.`);
           return;
         }
 
