@@ -3047,6 +3047,12 @@ button.yw-belt-track--active {
   min-width: 0;
   max-width: 100%;
 }
+.yw-belt-track-name-lock {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
 .yw-belt-track-icon {
   flex-shrink: 0;
   font-size: 1.15rem;
@@ -3285,6 +3291,10 @@ button.yw-belt-track--tied .yw-belt-race-marker--you,
   letter-spacing: 0.01em;
   line-height: 1.2;
   color: #fff;
+}
+.yw-belt-race-you-short,
+.yw-belt-race-pill-user--short {
+  display: none;
 }
 .yw-belt-race-marker--you-lead {
   border-color: color-mix(in oklch, var(--belt-pill-tone, var(--belt-accent, #94a3b8)) 72%, #fff);
@@ -9319,18 +9329,32 @@ button.belt-card:hover:not(:disabled),
     display: contents;
   }
 
-  .yw-belt-track-name {
+  .yw-belt-track-name-lock {
     order: 1;
-    white-space: normal;
-    word-break: break-word;
-    overflow: visible;
-    text-overflow: unset;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .yw-belt-track-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
     font-size: 1.02rem;
     line-height: 1.2;
   }
 
   .yw-belt-track-icon {
+    flex-shrink: 0;
+  }
+
+  .yw-belt-track-chips {
     order: 2;
+    flex: 0 0 auto;
+    margin-left: auto;
+  }
+
+  .yw-belt-track-chips:empty {
+    display: none;
   }
 
   .yw-belt-track-hint {
@@ -9352,11 +9376,6 @@ button.belt-card:hover:not(:disabled),
     order: 4;
   }
 
-  .yw-belt-track-chips {
-    order: 5;
-    flex: 0 0 auto;
-  }
-
   .yw-belt-race {
     width: 100%;
     flex: 1 1 auto;
@@ -9367,7 +9386,7 @@ button.belt-card:hover:not(:disabled),
   }
 
   .yw-belt-race-plot {
-    height: 7.6rem;
+    height: 3.6rem;
     margin-top: 0;
     overflow: visible;
   }
@@ -9379,19 +9398,33 @@ button.belt-card:hover:not(:disabled),
   }
 
   .yw-belt-race-rail {
-    top: 50%;
+    top: 68%;
   }
 
   .yw-belt-race-marker {
-    top: 50%;
+    top: 68%;
+  }
+
+  .yw-belt-race-gap {
+    display: none;
+  }
+
+  .yw-belt-race-you-name,
+  .yw-belt-race-pill-user--full {
+    display: none;
+  }
+
+  .yw-belt-race-you-short,
+  .yw-belt-race-pill-user--short {
+    display: inline;
   }
 
   .yw-belt-race-marker--pill {
-    top: 50%;
+    top: 68%;
     width: auto;
     height: auto;
-    max-width: 10.4rem;
-    padding: 2px 8px;
+    max-width: none;
+    padding: 2px 6px;
     gap: 4px;
     display: inline-flex;
     flex-direction: row;
@@ -9400,26 +9433,26 @@ button.belt-card:hover:not(:disabled),
     border: 1px solid rgba(0, 0, 0, 0.2);
     border-radius: 12px;
     box-shadow: none;
-    transform: translate(-50%, 12px);
+    transform: translate(-50%, 4px);
   }
 
   .yw-belt-race-marker--pill-end {
-    transform: translate(-100%, 12px);
+    transform: translate(-100%, 4px);
   }
 
   .yw-belt-race-marker--pill-start {
-    transform: translate(0, 12px);
+    transform: translate(0, 4px);
   }
 
   .yw-belt-race-pill-name {
     display: flex;
     align-items: center;
     min-width: 0;
-    max-width: 8.4rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    max-width: none;
+    overflow: visible;
+    text-overflow: unset;
     white-space: nowrap;
-    font-size: 0.72rem;
+    font-size: 0.62rem;
     font-weight: 800;
     letter-spacing: 0.01em;
     line-height: 1.2;
@@ -9431,11 +9464,11 @@ button.belt-card:hover:not(:disabled),
     top: auto;
     left: auto;
     transform: none;
-    min-width: 1.2rem;
-    height: 1.1rem;
-    padding: 0 0.38rem;
+    min-width: 1.05rem;
+    height: 1.05rem;
+    padding: 0 0.32rem;
     border-radius: 999px;
-    font-size: 0.66rem;
+    font-size: 0.6rem;
     color: #000;
     background: #fff;
     border: 1.5px solid #111;
@@ -9445,13 +9478,14 @@ button.belt-card:hover:not(:disabled),
   .yw-belt-race-marker--you,
   button.yw-belt-track--lead .yw-belt-race-marker--you,
   button.yw-belt-track--tied .yw-belt-race-marker--you {
-    top: 50%;
+    top: 68%;
     bottom: auto;
     width: auto;
     height: auto;
-    min-width: 2.05rem;
-    padding: 2px 8px;
-    border-radius: 8px;
+    min-width: 0;
+    max-width: none;
+    padding: 2px 6px;
+    border-radius: 12px;
     display: inline-flex;
     flex-direction: row;
     align-items: center;
@@ -9461,12 +9495,14 @@ button.belt-card:hover:not(:disabled),
     box-shadow:
       0 0 0 1px rgba(0, 0, 0, 0.35),
       0 0 10px color-mix(in oklch, var(--belt-pill-tone, var(--belt-accent, #94a3b8)) 24%, transparent);
-    transform: translate(-50%, calc(-100% - 14px));
+    transform: translate(-50%, calc(-100% - 6px));
   }
 
   .yw-belt-race-you-label {
-    max-width: 8.4rem;
-    font-size: 0.72rem;
+    max-width: none;
+    overflow: visible;
+    font-size: 0.62rem;
+    letter-spacing: 0.04em;
   }
 
   .yw-belt-race-marker--you .yw-belt-race-count {
@@ -9474,21 +9510,21 @@ button.belt-card:hover:not(:disabled),
     top: auto;
     left: auto;
     transform: none;
-    min-width: 1.2rem;
-    height: 1.1rem;
-    padding: 0 0.38rem;
+    min-width: 1.05rem;
+    height: 1.05rem;
+    padding: 0 0.32rem;
     border-radius: 999px;
-    font-size: 0.66rem;
+    font-size: 0.6rem;
   }
 
   .yw-belt-race-marker--you-end,
   button.yw-belt-track--lead .yw-belt-race-marker--you-end,
   button.yw-belt-track--tied .yw-belt-race-marker--you-end {
-    transform: translate(-100%, calc(-100% - 14px));
+    transform: translate(-100%, calc(-100% - 6px));
   }
 
   .yw-belt-race-marker--you-start {
-    transform: translate(0, calc(-100% - 14px));
+    transform: translate(0, calc(-100% - 6px));
   }
 
   .lb-row,

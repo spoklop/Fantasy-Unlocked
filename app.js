@@ -16551,20 +16551,15 @@
             holders[0] ||
             null
           : null;
-      const secondPlace =
-        holdsBelt
-          ? (rows || [])
-              .filter(
-                (r) =>
-                  String(r.ownerId) !== String(ownerId) &&
-                  Number(r.total) < myTotal
-              )
-              .sort(
-                (a, b) =>
-                  Number(b.total) - Number(a.total) ||
-                  Number(a.rank) - Number(b.rank)
-              )[0] || null
-          : null;
+      const secondPlace = holdsBelt
+        ? (rows || [])
+            .filter((r) => String(r.ownerId) !== String(ownerId))
+            .sort(
+              (a, b) =>
+                Number(b.total) - Number(a.total) ||
+                Number(a.rank) - Number(b.rank)
+            )[0] || null
+        : null;
       const pillRow = chaseLeader || secondPlace || null;
       const pillTotal = pillRow ? Number(pillRow.total) || 0 : 0;
       const pillName = pillRow?.name || "";
@@ -16637,6 +16632,10 @@
 
       const badgeCountHtml = (n) =>
         `<span class="yw-belt-race-count">${escapeHtml(String(n))}</span>`;
+      const compactName = (name) => {
+        const text = String(name || "").trim();
+        return text.length > 6 ? `${text.slice(0, 6)}…` : text;
+      };
       const rivalPillHtml =
         pillRow && pillPct != null && pillName
           ? `<span class="yw-belt-race-marker yw-belt-race-marker--pill${
@@ -16651,8 +16650,10 @@
               pillTip
             )}" data-tooltip="${escapeHtml(
               pillTip
-            )}"><span class="yw-belt-race-pill-name"><span class="yw-belt-race-pill-user">${escapeHtml(
+            )}"><span class="yw-belt-race-pill-name"><span class="yw-belt-race-pill-user yw-belt-race-pill-user--full">${escapeHtml(
               pillName
+            )}</span><span class="yw-belt-race-pill-user yw-belt-race-pill-user--short" aria-hidden="true">${escapeHtml(
+              compactName(pillName)
             )}</span></span>${badgeCountHtml(pillTotal)}</span>`
           : "";
       const gapMidPct =
@@ -16685,8 +16686,10 @@
             <span class="yw-belt-track-belt">
               <span class="yw-belt-track-title">
                 <span class="yw-belt-track-name-row">
+                  <span class="yw-belt-track-name-lock">
                   <span class="yw-belt-track-name">${escapeHtml(belt.name)}</span>
                   <span class="yw-belt-track-icon" aria-hidden="true">${icon}</span>
+                  </span>
                   <span class="yw-belt-rank yw-belt-rank--${rankMod}${holderAlert}${holderBoost}">${escapeHtml(
                     rankLabel
                   )}</span>
@@ -16731,9 +16734,9 @@
                 1
               )}%" title="${escapeHtml(
                 youLabel
-              )}"><span class="yw-belt-race-you-label">${escapeHtml(
+              )}"><span class="yw-belt-race-you-label"><span class="yw-belt-race-you-name">${escapeHtml(
                 youLabel
-              )}</span>${badgeCountHtml(
+              )}</span><span class="yw-belt-race-you-short" aria-hidden="true">YOU</span></span>${badgeCountHtml(
                 myTotal
               )}</span>
               </div>
