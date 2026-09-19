@@ -1019,6 +1019,28 @@ button.secondary:hover:not(:disabled) { background: var(--border); }
   outline-offset: 2px;
 }
 
+.dash-nav-more {
+  display: none;
+}
+
+.collections-mobile-hint {
+  display: none;
+}
+
+.collection-panel-heading {
+  min-width: 0;
+  flex: 1;
+}
+
+.collection-panel-summary {
+  display: none;
+  margin: 0.2rem 0 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+  line-height: 1.3;
+}
+
 .dash-toolbar-end {
   display: flex;
   flex-wrap: nowrap;
@@ -1125,6 +1147,15 @@ button.secondary:hover:not(:disabled) { background: var(--border); }
 #your-week-panel .yw-badge-gallery,
 #your-week-panel .yw-badge-gallery .yw-acc-grid {
   overflow: visible;
+}
+
+#your-week-panel .yw-plaque-reel {
+  display: contents;
+}
+
+.view-all-badges-btn,
+.yw-badge-sheet {
+  display: none;
 }
 
 #your-week-panel .yw-badge-gallery .yw-acc-grid {
@@ -1409,6 +1440,9 @@ button.secondary:hover:not(:disabled) { background: var(--border); }
 }
 
 /* Season / all-time record plaques — Hall of Fame metal, gallery size */
+#your-week-panel .yw-badge-gallery .yw-record-plaque[data-yw-open-record] {
+  cursor: pointer;
+}
 #your-week-panel .yw-badge-gallery .yw-record-plaque {
   --wof-notch: 14px;
   --wof-ink: #1a1a1a;
@@ -1493,7 +1527,8 @@ button.secondary:hover:not(:disabled) { background: var(--border); }
 #your-week-panel .yw-badge-gallery .yw-record-plaque-title,
 #your-week-panel .yw-badge-gallery .yw-record-plaque-body,
 #your-week-panel .yw-badge-gallery .yw-record-plaque-value,
-#your-week-panel .yw-badge-gallery .yw-record-plaque-meta,
+#your-week-panel .yw-badge-gallery .yw-record-plaque-subject,
+#your-week-panel .yw-badge-gallery .yw-record-plaque-when,
 #your-week-panel .yw-badge-gallery .yw-record-plaque-tier,
 #your-week-panel .yw-badge-gallery .plaque-bottom-label {
   position: relative;
@@ -1547,17 +1582,27 @@ button.secondary:hover:not(:disabled) { background: var(--border); }
     0 1px 0 rgba(255, 255, 255, 0.55),
     0 2px 0 rgba(0, 0, 0, 0.12);
 }
-#your-week-panel .yw-badge-gallery .yw-record-plaque-meta {
+#your-week-panel .yw-badge-gallery .yw-record-plaque-subject,
+#your-week-panel .yw-badge-gallery .yw-record-plaque-when {
+  display: block;
   margin: 0;
   max-width: 100%;
   font-family: var(--wof-serif);
-  font-size: 0.86rem;
   font-weight: 700;
   letter-spacing: 0.03em;
-  line-height: 1.28;
   text-align: center;
   color: #222222;
+}
+#your-week-panel .yw-badge-gallery .yw-record-plaque-subject {
+  font-size: 0.86rem;
+  line-height: 1.2;
   overflow-wrap: anywhere;
+}
+#your-week-panel .yw-badge-gallery .yw-record-plaque-when {
+  font-size: 0.74rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #333333;
 }
 #your-week-panel .yw-badge-gallery .yw-record-plaque-tier {
   flex: 0 0 auto;
@@ -4204,19 +4249,154 @@ button.yw-belt-track--tied.yw-belt-track--active {
   background: #facc15;
   color: #041208;
 }
+#achievements-panel .yw-week-bucket--infamy .yw-card[data-category-theme="tragic_hero"] .badge-tile-count {
+  background: #ef4444;
+  color: #041208;
+}
 #achievements-panel .yw-week-bucket--achievements .yw-card[data-category-theme="apex_predator"] .yw-card-crest,
 #achievements-panel .yw-week-bucket--achievements .yw-card[data-category-theme="tactician"] .yw-card-crest {
   background:
     radial-gradient(circle at 32% 28%, #fff7cc 0%, #facc15 38%, #d97706 72%, #78350f 100%);
+  border: 2px solid #fde68a;
   box-shadow:
-    0 0 0 3px #fde68a,
-    0 0 0 6px #92400e,
+    0 0 0 3px #92400e inset,
     0 8px 18px rgba(250, 204, 21, 0.32);
 }
+#achievements-panel .yw-week-bucket--achievements .yw-card-icon,
 #achievements-panel .yw-week-bucket--achievements .yw-card[data-category-theme="apex_predator"] .yw-card-icon,
 #achievements-panel .yw-week-bucket--achievements .yw-card[data-category-theme="tactician"] .yw-card-icon {
-  background: radial-gradient(circle at 40% 30%, #fffbeb, #fbbf24 70%);
-  border: 1.5px solid #fef3c7;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+/* Badge History: one tile geometry for every category */
+#achievements-panel .yw-week-bucket .badge-flip-card,
+#achievements-panel .yw-week-bucket--infamy .badge-flip-card,
+#achievements-panel .yw-week-bucket .badge-flip-card-inner,
+#achievements-panel .yw-week-bucket--infamy .badge-flip-card-inner {
+  height: 300px;
+  min-height: 300px;
+}
+#achievements-panel .badge-flip-card-front.yw-card,
+#achievements-panel .yw-week-bucket--achievements .yw-card,
+#achievements-panel .yw-week-bucket--infamy .yw-card,
+#achievements-panel .yw-week-bucket--nuggets .yw-card,
+#achievements-panel .yw-week-bucket--lucks .lucky-break-card,
+#achievements-panel .yw-week-bucket--lucks .yw-card,
+#achievements-panel .card-infamy {
+  min-height: 0;
+  height: 100%;
+  padding: 1.1rem 1.05rem 1.55rem;
+  justify-content: flex-start;
+  gap: 0;
+  box-sizing: border-box;
+}
+#achievements-panel .card-infamy-inner,
+#achievements-panel .yw-week-bucket--infamy .card-infamy-inner {
+  justify-content: flex-start;
+  gap: 0;
+  padding: 0;
+}
+#achievements-panel .yw-card-crest,
+#achievements-panel .lucky-break-mark,
+#achievements-panel .badge-tile-icon {
+  width: 5.5rem;
+  height: 5.5rem;
+  margin: 0 0 0.8rem;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+/* History crests: same outer size; rings stay inside the circle */
+#achievements-panel .yw-week-bucket--achievements .yw-card-crest,
+#achievements-panel .yw-week-bucket--achievements .yw-card[data-category-theme="apex_predator"] .yw-card-crest,
+#achievements-panel .yw-week-bucket--achievements .yw-card[data-category-theme="tactician"] .yw-card-crest {
+  border: 2px solid #fde68a;
+  box-shadow:
+    0 0 0 3px #92400e inset,
+    0 8px 18px rgba(250, 204, 21, 0.32);
+}
+#achievements-panel .yw-week-bucket--nuggets .yw-card-crest,
+#achievements-panel .yw-week-bucket--nuggets .yw-card-crest[data-category-theme],
+#achievements-panel .yw-week-bucket--nuggets .card-nugget .yw-card-crest {
+  border: 2px solid #7dd3fc;
+  box-shadow:
+    0 0 0 3px #0369a1 inset,
+    0 0 12px rgba(56, 189, 248, 0.18);
+}
+#achievements-panel .yw-week-bucket--lucks .yw-card-crest,
+#achievements-panel .yw-week-bucket--lucks .lucky-break-mark,
+#achievements-panel .yw-week-bucket--lucks .lucky-break-card .yw-card-crest {
+  border: 2px solid #86efac;
+  box-shadow:
+    0 0 0 3px #166534 inset,
+    0 0 16px rgba(34, 197, 94, 0.12);
+}
+#achievements-panel .yw-week-bucket--infamy .yw-card-crest {
+  border: 2px solid rgba(248, 113, 113, 0.85);
+  box-shadow:
+    0 0 0 3px #7f1d1d inset,
+    0 0 16px rgba(185, 28, 28, 0.35),
+    inset 0 0 10px rgba(0, 0, 0, 0.45);
+}
+#achievements-panel .yw-week-bucket--achievements .yw-card-icon,
+#achievements-panel .yw-week-bucket--infamy .yw-card-icon,
+#achievements-panel .yw-week-bucket--nuggets .yw-card-icon,
+#achievements-panel .yw-week-bucket--lucks .yw-card-icon,
+#achievements-panel .yw-card-icon {
+  display: grid;
+  place-items: center;
+  width: 3.9rem;
+  height: 3.9rem;
+  font-size: 3.05rem;
+  line-height: 1;
+  padding: 0;
+  filter: none;
+  transform: translateY(-0.05em);
+}
+#achievements-panel .yw-week-bucket--infamy .yw-card-icon {
+  filter: grayscale(0.15) saturate(0.85);
+}
+#achievements-panel .yw-week-bucket--lucks .lucky-break-mark {
+  display: grid;
+  place-items: center;
+  font-size: 3.05rem;
+  line-height: 1;
+  filter: none;
+  transform: translateY(-0.05em);
+}
+#achievements-panel .yw-week-bucket--achievements .yw-card-name,
+#achievements-panel .yw-week-bucket--infamy .yw-card-name,
+#achievements-panel .yw-week-bucket--nuggets .yw-card-name,
+#achievements-panel .yw-week-bucket--lucks .yw-card-name,
+#achievements-panel .yw-week-bucket--lucks .lucky-break-name,
+#achievements-panel .badge-tile-name {
+  margin: 0;
+  padding: 0 0.2rem;
+  font-size: 1.22rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  line-height: 1.15;
+}
+#achievements-panel .yw-week-bucket--achievements .yw-card-desc,
+#achievements-panel .yw-week-bucket--infamy .yw-card-desc,
+#achievements-panel .yw-week-bucket--nuggets .yw-card-desc,
+#achievements-panel .yw-week-bucket--lucks .yw-card-desc,
+#achievements-panel .yw-week-bucket--lucks .lucky-break-desc,
+#achievements-panel .badge-tile-blurb {
+  margin: 0.52rem 0 0;
+  padding: 0 1.7rem 0 0.65rem;
+  font-size: 0.92rem;
+  line-height: 1.45;
+  font-weight: 500;
+  overflow: hidden;
+}
+#achievements-panel .yw-card-belt-mark {
+  right: 0.55rem;
+  bottom: 0.48rem;
+  z-index: 3;
+  font-size: 19px;
 }
 .wall-badge-section .yw-card-name {
   display: -webkit-box;
@@ -5206,7 +5386,7 @@ button.belt-card:hover:not(:disabled),
   border-radius: 12px;
   padding: 0;
   margin: 0.85rem 0 1.25rem;
-  overflow: hidden;
+  overflow: visible;
   box-shadow:
     0 12px 32px rgba(0, 0, 0, 0.35),
     0 0 24px var(--belt-glow);
@@ -5236,6 +5416,7 @@ button.belt-card:hover:not(:disabled),
   border: 1px solid rgba(148, 163, 184, 0.16);
   border-radius: 10px;
   padding: 0.8rem 0.9rem;
+  overflow: visible;
 }
 
 .belt-lb-head {
@@ -5315,15 +5496,51 @@ button.belt-card:hover:not(:disabled),
 }
 
 .belt-lb-chip {
+  position: relative;
+  appearance: none;
   display: inline-flex;
   align-items: center;
   gap: 0.28rem;
+  margin: 0;
   padding: 0.28rem 0.55rem;
   border-radius: 999px;
   border: 1px solid rgba(148, 163, 184, 0.28);
   background: rgba(15, 23, 42, 0.85);
+  font: inherit;
   font-size: 0.74rem;
   color: #e2e8f0;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+.belt-lb-chip:hover,
+.belt-lb-chip.is-tip {
+  border-color: color-mix(in srgb, var(--belt-accent, #94a3b8) 70%, #fff);
+}
+
+.belt-lb-chip[data-tooltip]:hover::after,
+.belt-lb-chip[data-tooltip].is-tip::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 7px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 11.5rem;
+  background: #1a222d;
+  border: 1px solid var(--border, #2a3544);
+  color: var(--text, #e8edf4);
+  padding: 0.32rem 0.5rem;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1.25;
+  text-align: center;
+  white-space: normal;
+  z-index: 20;
+  pointer-events: none;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
 }
 
 .belt-lb-chip .chip-count {
@@ -8249,6 +8466,8 @@ button.belt-card:hover:not(:disabled),
 #wall-panel .wall-record-plaque-body,
 #wall-panel .legacy-hall--fame .wall-record-plaque-value,
 #wall-panel .wall-record-plaque-value,
+#wall-panel .legacy-hall--fame .wall-record-plaque-subject,
+#wall-panel .wall-record-plaque-subject,
 #wall-panel .legacy-hall--fame .wall-record-plaque-meta,
 #wall-panel .wall-record-plaque-meta,
 #wall-panel .legacy-hall--fame .wall-record-plaque-holder,
@@ -8289,6 +8508,7 @@ button.belt-card:hover:not(:disabled),
   flex-grow: 1;
   width: 100%;
   min-height: 0;
+  gap: 0.12rem;
   text-align: center;
 }
 #wall-panel .legacy-hall--fame .wall-record-plaque-value,
@@ -8303,18 +8523,31 @@ button.belt-card:hover:not(:disabled),
   color: #000000;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
 }
+#wall-panel .legacy-hall--fame .wall-record-plaque-subject,
+#wall-panel .wall-record-plaque-subject,
 #wall-panel .legacy-hall--fame .wall-record-plaque-meta,
 #wall-panel .wall-record-plaque-meta {
+  display: block;
   margin: 0;
   max-width: 100%;
   font-family: var(--font);
-  font-size: 0.88rem;
   font-weight: 600;
   letter-spacing: 0.02em;
   line-height: 1.25;
   text-align: center;
   color: #222222;
-  overflow-wrap: anywhere;
+}
+#wall-panel .legacy-hall--fame .wall-record-plaque-subject,
+#wall-panel .wall-record-plaque-subject {
+  font-size: 0.88rem;
+  overflow-wrap: break-word;
+}
+#wall-panel .legacy-hall--fame .wall-record-plaque-meta,
+#wall-panel .wall-record-plaque-meta {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #333333;
+  overflow-wrap: normal;
 }
 #wall-panel .legacy-hall--fame .wall-record-plaque-holder,
 #wall-panel .wall-record-plaque-holder {
@@ -8385,6 +8618,8 @@ button.belt-card:hover:not(:disabled),
 }
 #wall-panel .legacy-hall--fame .wall-record-plaque--silver .wall-record-plaque-meta,
 #wall-panel .wall-record-plaque--silver .wall-record-plaque-meta,
+#wall-panel .legacy-hall--fame .wall-record-plaque--silver .wall-record-plaque-subject,
+#wall-panel .wall-record-plaque--silver .wall-record-plaque-subject,
 #wall-panel .legacy-hall--fame .wall-record-plaque--silver .wall-record-plaque-holder,
 #wall-panel .wall-record-plaque--silver .wall-record-plaque-holder {
   color: #161c24;
@@ -9000,6 +9235,19 @@ button.belt-card:hover:not(:disabled),
   color: #fecaca;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
 }
+#wall-panel .legacy-hall--pain .pain-tombstone-body {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  gap: 0.12rem;
+  text-align: center;
+}
 #wall-panel .legacy-hall--pain .pain-tombstone-value {
   position: relative;
   z-index: 1;
@@ -9028,18 +9276,29 @@ button.belt-card:hover:not(:disabled),
   line-height: 1.35;
   color: #e8a0a0;
 }
+#wall-panel .legacy-hall--pain .pain-tombstone-subject,
 #wall-panel .legacy-hall--pain .pain-tombstone-meta {
   position: relative;
   z-index: 1;
+  display: block;
   flex: 0 0 auto;
   margin: 0;
   max-width: 94%;
   font-family: var(--font);
-  font-size: 0.88rem;
   font-weight: 600;
   letter-spacing: 0.01em;
   line-height: 1.25;
+  text-align: center;
   color: #fecaca;
+}
+#wall-panel .legacy-hall--pain .pain-tombstone-subject {
+  font-size: 0.88rem;
+  overflow-wrap: break-word;
+}
+#wall-panel .legacy-hall--pain .pain-tombstone-meta {
+  font-size: 0.8rem;
+  color: #e8a0a0;
+  overflow-wrap: normal;
 }
 #wall-panel .legacy-hall--pain .pain-tombstone-holder {
   position: relative;
@@ -9105,7 +9364,7 @@ button.belt-card:hover:not(:disabled),
 @media (max-width: 600px) {
   html,
   body {
-    overflow-x: hidden;
+    overflow-x: clip;
     max-width: 100%;
   }
 
@@ -9256,7 +9515,6 @@ button.belt-card:hover:not(:disabled),
   .yw-acc-grid,
   .lucky-breaks-grid,
   .wall-badge-grid,
-  .nfl-mvp-grid,
   .yw-meant-grid,
   .yw-chase-grid {
     grid-template-columns: 1fr;
@@ -9656,97 +9914,176 @@ button.belt-card:hover:not(:disabled),
     font-size: 0.72rem;
   }
 
-  /* Your Week badge/plaque swipe reel */
+  /* Your Week: compact 2x3 badge grid + matching plaque tiles */
   #your-week-panel .yw-badge-gallery {
     overflow: visible;
   }
   #your-week-panel .yw-badge-gallery .yw-acc-grid {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    overflow-y: visible;
-    scroll-snap-type: x mandatory;
-    scroll-padding-inline: 0.75rem;
-    padding: 0.2rem 1.25rem 1.5rem 0.1rem;
-    -webkit-overflow-scrolling: touch;
-    gap: 0;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
     align-items: stretch;
-    grid-template-columns: none;
+    justify-content: stretch;
+    width: 100%;
+    overflow: visible;
+    padding: 0;
+    scroll-snap-type: none;
   }
-  #your-week-panel .yw-badge-gallery .yw-card,
-  #your-week-panel .yw-badge-gallery .lucky-break-card,
+  #your-week-panel .yw-badge-gallery .yw-plaque-reel {
+    display: contents;
+  }
+  #your-week-panel .yw-badge-gallery .yw-record-plaque[data-yw-open-record] {
+    cursor: pointer;
+  }
+  #your-week-panel .yw-badge-gallery .yw-plaque-reel .yw-record-plaque,
   #your-week-panel .yw-badge-gallery .yw-record-plaque {
-    flex: 0 0 calc(55% - 1rem);
+    --wof-notch: 6px;
+    flex: none;
     width: auto;
-    min-width: 200px;
-    max-width: 240px;
-    margin-right: 1rem;
-    scroll-snap-align: center;
+    min-width: 0;
+    max-width: none;
+    margin: 0;
+    scroll-snap-align: unset;
     height: auto;
     min-height: 0;
-    aspect-ratio: 3 / 4;
-    padding: 1rem;
+    aspect-ratio: 1 / 1.1;
+    padding: 0.45rem 0.28rem 0.35rem;
+    box-sizing: border-box;
+    gap: 0.08rem;
+    justify-content: flex-start;
+  }
+  #your-week-panel .yw-badge-gallery .yw-record-plaque::before {
+    inset: 4px;
+    background:
+      radial-gradient(circle at 4px 4px, #5c3d0a 0.9px, #ead27a 1.4px, transparent 1.9px),
+      radial-gradient(circle at calc(100% - 4px) 4px, #5c3d0a 0.9px, #ead27a 1.4px, transparent 1.9px),
+      radial-gradient(circle at 4px calc(100% - 4px), #5c3d0a 0.9px, #ead27a 1.4px, transparent 1.9px),
+      radial-gradient(circle at calc(100% - 4px) calc(100% - 4px), #5c3d0a 0.9px, #ead27a 1.4px, transparent 1.9px);
+  }
+  #your-week-panel .yw-badge-gallery .yw-record-plaque--silver::before {
+    background:
+      radial-gradient(circle at 4px 4px, #2c333e 0.9px, #c5ccd6 1.4px, transparent 1.9px),
+      radial-gradient(circle at calc(100% - 4px) 4px, #2c333e 0.9px, #c5ccd6 1.4px, transparent 1.9px),
+      radial-gradient(circle at 4px calc(100% - 4px), #2c333e 0.9px, #c5ccd6 1.4px, transparent 1.9px),
+      radial-gradient(circle at calc(100% - 4px) calc(100% - 4px), #2c333e 0.9px, #c5ccd6 1.4px, transparent 1.9px);
+  }
+  #your-week-panel .yw-badge-gallery .yw-mobile-badge-tile,
+  #your-week-panel .yw-badge-gallery .lucky-break-card.yw-mobile-badge-tile {
+    flex: none;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    margin: 0;
+    scroll-snap-align: unset;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    min-height: 0;
+    height: auto;
+    aspect-ratio: 1 / 1.1;
+    padding: 0.55rem 0.35rem 0.45rem;
+    text-align: center;
+    cursor: pointer;
     box-sizing: border-box;
   }
-  #your-week-panel .yw-badge-gallery .card-infamy,
-  #your-week-panel .yw-badge-gallery .yw-card--infamy {
-    min-height: 0;
-    padding: 1rem;
-  }
-  #your-week-panel .yw-badge-gallery .yw-card-crest,
-  #your-week-panel .yw-badge-gallery .lucky-break-mark {
-    width: 64px;
-    height: 64px;
-  }
-  #your-week-panel .yw-badge-gallery .yw-card-icon,
-  #your-week-panel .yw-badge-gallery .lucky-break-mark {
-    width: 56px;
-    height: 56px;
-    font-size: 2.15rem;
-  }
-  #your-week-panel .yw-badge-gallery .yw-card-name,
-  #your-week-panel .yw-badge-gallery .lucky-break-name {
-    font-size: 1rem;
-    line-height: 1.2;
-    letter-spacing: 0.04em;
-  }
-  #your-week-panel .yw-badge-gallery .yw-card-desc,
-  #your-week-panel .yw-badge-gallery .lucky-break-desc {
-    font-size: 0.72rem;
-    line-height: 1.25;
-    margin-top: 4px;
-    padding: 0 0.1rem 8px;
-    display: block;
-    overflow: visible;
-    -webkit-line-clamp: unset;
-    line-clamp: unset;
-  }
-  #your-week-panel .yw-badge-gallery .yw-record-plaque-title {
-    font-size: 0.68rem;
-    letter-spacing: 0.06em;
+  #your-week-panel .yw-badge-gallery .yw-mobile-badge-tile .yw-card-crest,
+  #your-week-panel .yw-badge-gallery .yw-mobile-badge-tile .lucky-break-mark {
+    width: 42px;
+    height: 42px;
     margin: 0;
   }
-  #your-week-panel .yw-badge-gallery .yw-record-plaque-tier {
-    width: 90%;
-    max-width: 90%;
-    margin: 0;
-    padding: 0.28rem 0 0;
+  #your-week-panel .yw-badge-gallery .yw-mobile-badge-tile .yw-card-icon,
+  #your-week-panel .yw-badge-gallery .yw-mobile-badge-tile .lucky-break-mark {
+    width: 38px;
+    height: 38px;
+    font-size: 1.55rem;
   }
-  #your-week-panel .yw-badge-gallery .yw-record-plaque-value {
-    font-size: 1.72rem;
-    margin: 0;
-  }
-  #your-week-panel .yw-badge-gallery .yw-record-plaque-meta {
-    font-size: 0.76rem;
-    line-height: 1.2;
-  }
-  #your-week-panel .yw-badge-gallery .plaque-bottom-label {
+  #your-week-panel .yw-badge-gallery .yw-mobile-badge-tile .yw-card-name,
+  #your-week-panel .yw-badge-gallery .yw-mobile-badge-tile .lucky-break-name {
     font-size: 0.62rem;
-    letter-spacing: 0.12em;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    line-height: 1.15;
+    max-height: 2.4em;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  #your-week-panel .yw-badge-gallery .yw-mobile-badge-tile .card-infamy-inner {
+    gap: 0.35rem;
+    padding: 0;
+    justify-content: center;
+    min-height: 0;
+  }
+  #your-week-panel .yw-badge-gallery .yw-mobile-badge-tile .yw-card-desc,
+  #your-week-panel .yw-badge-gallery .yw-mobile-badge-tile .lucky-break-desc,
+  #your-week-panel .yw-badge-gallery .yw-mobile-badge-tile .card-tags-wrapper,
+  #your-week-panel .yw-badge-gallery .yw-mobile-badge-tile .yw-alltime-banner {
+    display: none;
+  }
+  #your-week-panel .yw-badge-gallery .yw-mobile-badge-tile .yw-card-belt-mark,
+  #your-week-panel .yw-badge-gallery .lucky-break-card.yw-mobile-badge-tile .yw-card-belt-mark {
+    display: block;
+    right: 11px;
+    bottom: 11px;
+    font-size: 13px;
+    opacity: 0.7;
   }
 
-  /* Badge History: section headers stay stacked; each category is a swipe reel */
+  #your-week-panel .yw-badge-gallery .yw-record-plaque-title {
+    font-size: 0.48rem;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: clip;
+    margin: 0 0 1px;
+  }
+  #your-week-panel .yw-badge-gallery .yw-record-plaque-body {
+    gap: 0;
+    justify-content: center;
+  }
+  #your-week-panel .yw-badge-gallery .yw-record-plaque-value {
+    font-size: 0.92rem;
+    font-weight: 800;
+    line-height: 1.05;
+    margin: 2px 0;
+  }
+  #your-week-panel .yw-badge-gallery .yw-record-plaque-subject,
+  #your-week-panel .yw-badge-gallery .yw-record-plaque-when {
+    display: block;
+    text-align: center;
+    color: rgba(0, 0, 0, 0.85);
+    overflow: visible;
+    white-space: normal;
+    line-height: 1.15;
+  }
+  #your-week-panel .yw-badge-gallery .yw-record-plaque-subject {
+    font-size: 0.5rem;
+    font-weight: 700;
+  }
+  #your-week-panel .yw-badge-gallery .yw-record-plaque-when {
+    font-size: 0.46rem;
+    font-weight: 600;
+  }
+  #your-week-panel .yw-badge-gallery .yw-record-plaque-tier {
+    width: 94%;
+    max-width: 94%;
+    margin-top: auto;
+    padding: 0.1rem 0 0;
+  }
+  #your-week-panel .yw-badge-gallery .plaque-bottom-label {
+    font-size: 0.46rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    margin-top: auto;
+  }
+
+  /* Badge History: compact 3-across tiles matching Your Week, keep blurb */
   #achievements-panel .wall-badge-section,
   #achievements-panel .wall-badge-category {
     display: block;
@@ -9760,48 +10097,77 @@ button.belt-card:hover:not(:disabled),
     padding-bottom: 0.15rem;
     background: var(--bg, #07111f);
   }
-  #achievements-panel .wall-badge-grid {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    overflow-y: visible;
-    scroll-snap-type: x mandatory;
-    padding-bottom: 1rem;
-    -webkit-overflow-scrolling: touch;
-    gap: 0;
-    grid-template-columns: none;
-  }
+  #achievements-panel .wall-badge-grid,
   #achievements-panel .yw-week-bucket--infamy .wall-badge-grid {
-    overflow-x: auto;
-    overflow-y: visible;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
+    align-items: stretch;
+    justify-content: stretch;
+    width: 100%;
+    overflow: visible;
+    padding: 0;
+    scroll-snap-type: none;
   }
   #achievements-panel .yw-week-bucket .wall-badge-grid .badge-flip-card,
   #achievements-panel .yw-week-bucket--infamy .wall-badge-grid .badge-flip-card {
-    flex: 0 0 calc(55% - 0.75rem);
+    flex: none;
     width: auto;
-    min-width: 180px;
-    max-width: 220px;
-    margin-right: 0.75rem;
-    scroll-snap-align: start;
+    min-width: 0;
+    max-width: none;
+    margin: 0;
+    scroll-snap-align: unset;
     height: auto;
     min-height: 0;
-    aspect-ratio: 3 / 4;
+    aspect-ratio: 1 / 1.22;
+    perspective: none;
+    cursor: pointer;
   }
   #achievements-panel .yw-week-bucket .wall-badge-grid .badge-flip-card.flipped,
   #achievements-panel .yw-week-bucket--infamy .wall-badge-grid .badge-flip-card.flipped {
-    aspect-ratio: auto;
-    min-height: 260px;
+    aspect-ratio: 1 / 1.22;
+    min-height: 0;
   }
   #achievements-panel .yw-week-bucket .wall-badge-grid .badge-flip-card-inner,
   #achievements-panel .yw-week-bucket--infamy .wall-badge-grid .badge-flip-card-inner {
     height: 100%;
-    min-height: 100%;
+    min-height: 0;
     aspect-ratio: auto;
+    transform: none !important;
   }
-  #achievements-panel .wall-badge-grid .badge-flip-card-front,
   #achievements-panel .wall-badge-grid .badge-flip-card-back {
-    min-height: 100%;
+    display: none;
+  }
+  #achievements-panel .wall-badge-grid .badge-flip-card-front {
+    position: relative;
+    inset: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.18rem;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    padding: 0.4rem 0.28rem 1.15rem;
+    text-align: center;
+    box-sizing: border-box;
+    backface-visibility: visible;
+    transform: none;
+  }
+  #achievements-panel .wall-badge-grid .badge-flip-card-front.card-infamy,
+  #achievements-panel .yw-week-bucket--infamy .wall-badge-grid .badge-flip-card-front,
+  #achievements-panel .yw-week-bucket--nuggets .wall-badge-grid .badge-flip-card-front,
+  #achievements-panel .yw-week-bucket--lucks .wall-badge-grid .badge-flip-card-front {
+    min-height: 0;
+    height: 100%;
+    padding: 0.4rem 0.28rem 1.15rem;
+  }
+  #achievements-panel .wall-badge-grid .badge-flip-card-front.card-infamy .card-infamy-inner {
+    gap: 0.18rem;
+    padding: 0;
+    justify-content: flex-start;
+    min-height: 0;
   }
   #achievements-panel .yw-week-bucket--achievements .wall-badge-grid .yw-card-crest,
   #achievements-panel .yw-week-bucket--infamy .wall-badge-grid .yw-card-crest,
@@ -9809,18 +10175,30 @@ button.belt-card:hover:not(:disabled),
   #achievements-panel .yw-week-bucket--lucks .wall-badge-grid .yw-card-crest,
   #achievements-panel .yw-week-bucket--lucks .wall-badge-grid .lucky-break-mark,
   #achievements-panel .wall-badge-grid .badge-tile-icon {
-    width: 52px;
-    height: 52px;
-    margin-bottom: 0.45rem;
+    width: 42px;
+    height: 42px;
+    margin: 0 0 0.1rem;
+    box-sizing: border-box;
   }
   #achievements-panel .yw-week-bucket--achievements .wall-badge-grid .yw-card-icon,
   #achievements-panel .yw-week-bucket--infamy .wall-badge-grid .yw-card-icon,
   #achievements-panel .yw-week-bucket--nuggets .wall-badge-grid .yw-card-icon,
-  #achievements-panel .yw-week-bucket--lucks .wall-badge-grid .yw-card-icon,
+  #achievements-panel .yw-week-bucket--lucks .wall-badge-grid .yw-card-icon {
+    width: 22px;
+    height: 22px;
+    font-size: 1.15rem;
+    line-height: 1;
+    filter: none;
+    transform: translateY(-0.04em);
+  }
+  #achievements-panel .yw-week-bucket--infamy .wall-badge-grid .yw-card-icon {
+    filter: grayscale(0.15) saturate(0.85);
+  }
   #achievements-panel .yw-week-bucket--lucks .wall-badge-grid .lucky-break-mark {
-    width: 52px;
-    height: 52px;
-    font-size: 1.65rem;
+    font-size: 1.15rem;
+    line-height: 1;
+    filter: none;
+    transform: translateY(-0.04em);
   }
   #achievements-panel .yw-week-bucket--achievements .wall-badge-grid .yw-card-name,
   #achievements-panel .yw-week-bucket--infamy .wall-badge-grid .yw-card-name,
@@ -9828,19 +10206,74 @@ button.belt-card:hover:not(:disabled),
   #achievements-panel .yw-week-bucket--lucks .wall-badge-grid .yw-card-name,
   #achievements-panel .yw-week-bucket--lucks .wall-badge-grid .lucky-break-name,
   #achievements-panel .wall-badge-grid .badge-tile-name {
-    font-size: 0.95rem;
+    font-size: 0.62rem;
     font-weight: 800;
+    letter-spacing: 0.03em;
+    line-height: 1.15;
+    max-height: 2.4em;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    margin: 0;
+    padding: 0 0.1rem;
   }
   #achievements-panel .yw-week-bucket--achievements .wall-badge-grid .yw-card-desc,
   #achievements-panel .yw-week-bucket--infamy .wall-badge-grid .yw-card-desc,
   #achievements-panel .yw-week-bucket--nuggets .wall-badge-grid .yw-card-desc,
   #achievements-panel .yw-week-bucket--lucks .wall-badge-grid .yw-card-desc,
   #achievements-panel .yw-week-bucket--lucks .wall-badge-grid .lucky-break-desc,
-  #achievements-panel .wall-badge-grid .badge-tile-blurb {
-    font-size: 0.75rem;
+  #achievements-panel .wall-badge-grid .badge-tile-blurb,
+  #achievements-panel .wall-badge-grid .card-infamy .yw-card-desc {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    font-size: 0.48rem;
+    font-weight: 600;
     line-height: 1.2;
-    padding: 0 0.2rem;
-    margin-top: 0.35rem;
+    padding: 0 0.1rem;
+    margin: 0;
+    color: #fff;
+    text-align: center;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  #achievements-panel .wall-badge-grid .badge-flip-card-front.card-infamy .card-infamy-inner {
+    position: static;
+  }
+  #achievements-panel .wall-badge-grid .card-tags-wrapper {
+    display: contents;
+  }
+  #achievements-panel .wall-badge-grid .badge-flip-card-front .badge-tile-count {
+    display: inline-flex;
+    align-items: center;
+    position: absolute;
+    top: 5px;
+    left: 6px;
+    margin: 0;
+    z-index: 4;
+    pointer-events: none;
+    font-size: 0.5rem;
+    font-weight: 800;
+    padding: 0.08rem 0.3rem;
+    line-height: 1.15;
+    border-radius: 999px;
+  }
+  #achievements-panel .yw-week-bucket--achievements .wall-badge-grid .badge-flip-card-front .badge-tile-count {
+    top: 8px;
+    left: 9px;
+  }
+  #achievements-panel .yw-week-bucket--achievements .wall-badge-grid .yw-card-belt-mark,
+  #achievements-panel .yw-week-bucket--infamy .wall-badge-grid .yw-card-belt-mark,
+  #achievements-panel .yw-week-bucket--nuggets .wall-badge-grid .yw-card-belt-mark,
+  #achievements-panel .yw-week-bucket--lucks .wall-badge-grid .yw-card-belt-mark {
+    display: block;
+    right: 8px;
+    bottom: 8px;
+    z-index: 3;
+    font-size: 13px;
+    opacity: 0.7;
   }
 
   /* League Collections: AllPoints + Winigami fit 0–9 columns; no horizontal scroll */
@@ -9951,5 +10384,693 @@ button.belt-card:hover:not(:disabled),
     left: auto;
     right: 0;
     transform: none;
+  }
+
+  /* ── Mobile UX: 4+More nav, compact halls, badge snap, sticky chrome, collections ── */
+  .collections-mobile-hint {
+    display: block;
+    margin: -0.15rem 0 0.85rem;
+    color: var(--muted);
+    font-size: 0.8rem;
+    line-height: 1.35;
+  }
+
+  .collection-panel-summary {
+    display: block;
+  }
+
+  .collection-panel-header {
+    align-items: flex-start;
+    gap: 0.75rem;
+    min-height: 52px;
+    padding: 0.75rem 0.9rem;
+  }
+
+  .collection-panel-chevron {
+    flex-shrink: 0;
+    margin-top: 0.15rem;
+  }
+
+  #dashboard .dash-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.28rem 0.4rem;
+    margin: 0 -0.75rem 0;
+    padding: 0.28rem 0.75rem 0.32rem;
+    background: color-mix(in srgb, var(--bg, #0a0e14) 94%, transparent);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+
+  #dashboard .back-btn {
+    flex: 0 0 auto;
+    width: auto;
+    min-height: 32px;
+    padding: 0.2rem 0.15rem;
+    font-size: 0.75rem;
+    white-space: nowrap;
+  }
+
+  #dashboard .dash-nav {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    overflow: visible;
+    scroll-snap-type: none;
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    gap: 4px;
+  }
+
+  #dashboard #dash-nav .dash-nav-tab--more-only {
+    display: none;
+  }
+
+  #dashboard .dash-nav-more {
+    display: block;
+    position: relative;
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  #dashboard #dash-nav .dash-nav-tab:not(.dash-nav-tab--more-only) {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 36px;
+    padding: 0.32rem 0.22rem;
+    font-size: 0.66rem;
+    line-height: 1.12;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    scroll-snap-align: unset;
+  }
+
+  #dashboard .dash-nav-more-btn {
+    appearance: none;
+    width: 100%;
+    min-height: 36px;
+    margin: 0;
+    padding: 0.32rem 0.22rem;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.6);
+    font: inherit;
+    font-size: 0.66rem;
+    font-weight: 700;
+    line-height: 1.15;
+    cursor: pointer;
+  }
+
+  #dashboard .dash-nav-more.has-active .dash-nav-more-btn,
+  #dashboard .dash-nav-more.is-open .dash-nav-more-btn {
+    color: #000;
+    font-weight: 800;
+    background: var(--accent);
+  }
+
+  #dashboard .dash-nav-more-menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
+    z-index: 50;
+    min-width: 13.5rem;
+    padding: 0.35rem;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface, #12181f);
+    box-shadow: 0 16px 32px rgba(0, 0, 0, 0.5);
+  }
+
+  #dashboard .dash-nav-more-item {
+    appearance: none;
+    display: block;
+    width: 100%;
+    min-height: 44px;
+    margin: 0;
+    padding: 0.55rem 0.75rem;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: 0.88rem;
+    font-weight: 650;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  #dashboard .dash-nav-more-item.active {
+    background: var(--accent);
+    color: #000;
+    font-weight: 800;
+  }
+
+  #dashboard .dash-toolbar-end {
+    width: 100%;
+    flex: 1 1 100%;
+    justify-content: stretch;
+    gap: 0.3rem;
+  }
+
+  #dashboard .week-bar--selects,
+  #dashboard:has(#your-week-panel:not(.hidden)) .week-bar--selects {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+    gap: 0.35rem;
+  }
+
+  #dashboard .week-bar--selects .dash-select-wrap,
+  #dashboard .dash-user-select,
+  #dashboard .dash-user-select .dash-select-wrap,
+  #dashboard:has(#your-week-panel:not(.hidden)) .week-bar--selects .dash-select-wrap,
+  #dashboard:has(#your-week-panel:not(.hidden)) .dash-user-select,
+  #dashboard:has(#your-week-panel:not(.hidden)) .dash-user-select .dash-select-wrap {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+  }
+
+  #dashboard .dash-select,
+  #dashboard:has(#your-week-panel:not(.hidden)) .dash-select,
+  #dashboard:has(#your-week-panel:not(.hidden)) #your-week-week-select,
+  #dashboard:has(#your-week-panel:not(.hidden)) #your-week-season-select,
+  #dashboard:has(#your-week-panel:not(.hidden)) #your-week-user-select {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    height: 34px;
+    min-height: 34px;
+    field-sizing: unset;
+    padding: 0 1.4rem 0 0.45rem;
+    font-size: 0.76rem;
+    line-height: 32px;
+    background-position: right 0.35rem center;
+  }
+
+  #your-week-panel,
+  #achievements-panel {
+    padding: 0.35rem 0.7rem 1.6rem;
+  }
+  #your-week-panel .your-week-section--hero + .your-week-section {
+    padding-top: 0.35rem;
+  }
+  #dashboard:has(#your-week-panel:not(.hidden)) .dash-toolbar {
+    margin-bottom: 0;
+  }
+  #dashboard:has(#your-week-panel:not(.hidden)) .yw-hero-card {
+    padding: 0.4rem 0.55rem;
+    margin-bottom: 0.35rem;
+  }
+
+  #wall-panel .legacy-hall--fame .legacy-hall-belts,
+  #wall-panel .legacy-hall--pain .legacy-hall-belts {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    gap: 0.55rem;
+    padding: 0.75rem 0.7rem 1.1rem;
+    overflow: hidden;
+  }
+
+  #wall-panel .legacy-hall--fame button.belt-card,
+  #wall-panel .legacy-hall--pain button.belt-card {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+
+  #wall-panel .legacy-hall--fame button.belt-card:not(.is-expanded),
+  #wall-panel .legacy-hall--pain button.belt-card:not(.is-expanded) {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.55rem;
+    min-height: 64px;
+    padding: 0.5rem 0.6rem;
+    text-align: left;
+  }
+
+  #wall-panel .legacy-hall--fame button.belt-card:not(.is-expanded) .belt-card-top,
+  #wall-panel .legacy-hall--pain button.belt-card:not(.is-expanded) .belt-card-top {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.45rem;
+    min-width: 0;
+    width: auto;
+  }
+
+  #wall-panel .legacy-hall--fame button.belt-card:not(.is-expanded) .belt-card-icon,
+  #wall-panel .legacy-hall--pain button.belt-card:not(.is-expanded) .belt-card-icon {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    margin: 0;
+    font-size: 1.35rem;
+  }
+
+  #wall-panel .legacy-hall--fame button.belt-card:not(.is-expanded) .belt-card-title-block,
+  #wall-panel .legacy-hall--pain button.belt-card:not(.is-expanded) .belt-card-title-block {
+    flex: 1 1 auto;
+    width: auto;
+    max-width: 100%;
+    min-width: 0;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    background: none;
+    border: 0;
+    box-shadow: none;
+    clip-path: none;
+    text-align: left;
+  }
+
+  #wall-panel .legacy-hall--fame button.belt-card:not(.is-expanded) .belt-card-title,
+  #wall-panel .legacy-hall--pain button.belt-card:not(.is-expanded) .belt-card-title {
+    font-size: 0.78rem;
+    letter-spacing: 0.04em;
+    text-align: left;
+    white-space: normal;
+    color: inherit;
+    text-shadow: none;
+  }
+
+  #wall-panel .legacy-hall--fame button.belt-card:not(.is-expanded) .belt-card-centerpiece,
+  #wall-panel .legacy-hall--pain button.belt-card:not(.is-expanded) .belt-card-centerpiece {
+    flex: 0 1 46%;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    justify-content: flex-end;
+    overflow: hidden;
+  }
+
+  #wall-panel .legacy-hall--fame button.belt-card:not(.is-expanded) .belt-tied-names,
+  #wall-panel .legacy-hall--fame button.belt-card:not(.is-expanded) .belt-card-holder-name,
+  #wall-panel .legacy-hall--pain button.belt-card:not(.is-expanded) .belt-tied-names,
+  #wall-panel .legacy-hall--pain button.belt-card:not(.is-expanded) .belt-card-holder-name {
+    white-space: normal;
+    overflow-wrap: break-word;
+    word-break: normal;
+    text-align: right;
+    font-size: 0.68rem;
+    letter-spacing: 0.03em;
+    line-height: 1.25;
+  }
+
+  #wall-panel .legacy-hall--fame .records-grid--plaques,
+  #wall-panel .legacy-hall--pain .records-grid--tombstones,
+  #wall-panel .records-grid--plaques {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    gap: 0.5rem;
+    max-width: 100%;
+  }
+
+  #wall-panel .legacy-hall--fame .wall-record-plaque,
+  #wall-panel .wall-record-plaque,
+  #wall-panel .legacy-hall--pain .pain-tombstone {
+    flex: 0 0 auto;
+    width: 100%;
+    max-width: 100%;
+    min-height: 0;
+    height: auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.15rem 0.7rem;
+    padding: 0.6rem 0.75rem;
+    text-align: left;
+    clip-path: none;
+    border-radius: 12px;
+    aspect-ratio: auto;
+  }
+
+  #wall-panel .legacy-hall--pain .pain-tombstone::before,
+  #wall-panel .legacy-hall--pain .pain-tombstone::after,
+  #wall-panel .legacy-hall--fame .wall-record-plaque::before,
+  #wall-panel .legacy-hall--fame .wall-record-plaque::after,
+  #wall-panel .wall-record-plaque::before,
+  #wall-panel .wall-record-plaque::after {
+    display: none;
+  }
+
+  #wall-panel .wall-record-plaque-title,
+  #wall-panel .legacy-hall--fame .wall-record-plaque-title,
+  #wall-panel .legacy-hall--pain .pain-tombstone-title {
+    flex: 1 1 100%;
+    margin: 0;
+    font-size: 0.62rem;
+    letter-spacing: 0.08em;
+  }
+
+  #wall-panel .wall-record-plaque-body,
+  #wall-panel .legacy-hall--fame .wall-record-plaque-body,
+  #wall-panel .legacy-hall--pain .pain-tombstone-body {
+    flex: 1 1 auto;
+    align-items: flex-start;
+    min-width: 0;
+    width: auto;
+    margin: 0;
+    text-align: left;
+  }
+
+  #wall-panel .wall-record-plaque-value,
+  #wall-panel .legacy-hall--fame .wall-record-plaque-value,
+  #wall-panel .legacy-hall--pain .pain-tombstone-value {
+    margin: 0;
+    font-size: 1.05rem;
+    line-height: 1.15;
+  }
+
+  #wall-panel .wall-record-plaque-subject,
+  #wall-panel .legacy-hall--fame .wall-record-plaque-subject,
+  #wall-panel .wall-record-plaque-meta,
+  #wall-panel .legacy-hall--fame .wall-record-plaque-meta,
+  #wall-panel .legacy-hall--pain .pain-tombstone-subject,
+  #wall-panel .legacy-hall--pain .pain-tombstone-meta,
+  #wall-panel .legacy-hall--pain .pain-tombstone-desc {
+    margin: 0.1rem 0 0;
+    font-size: 0.7rem;
+    text-align: left;
+  }
+
+  #wall-panel .wall-record-plaque-holder,
+  #wall-panel .legacy-hall--fame .wall-record-plaque-holder,
+  #wall-panel .legacy-hall--pain .pain-tombstone-holder {
+    flex: 0 1 auto;
+    max-width: 46%;
+    margin: 0;
+    padding: 0;
+    font-size: 0.88rem;
+    line-height: 1.15;
+    text-align: right;
+  }
+
+  #achievements-panel .wall-badge-grid {
+    scroll-padding-inline: 0;
+    padding: 0;
+  }
+
+  .allpoints-grid,
+  .winigami-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    width: 100%;
+    max-width: 100%;
+    padding-bottom: 0.5rem;
+  }
+
+  .collection-panel--allpoints .allpoints-grid,
+  .collection-panel--winigami .winigami-wrap {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow: auto;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .collection-panel--allpoints .allpoints-row {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 2px;
+    width: max-content;
+    min-width: 0;
+  }
+
+  .collection-panel--allpoints .allpoints-row-label,
+  .collection-panel--winigami .winigami-row-label,
+  .collection-panel--winigami .winigami-corner {
+    width: 36px;
+    min-width: 36px;
+    font-size: 0.72rem;
+  }
+
+  .collection-panel--allpoints .allpoints-col-label,
+  .collection-panel--winigami .winigami-col-label {
+    width: 44px;
+    min-width: 44px;
+    font-size: 0.72rem;
+  }
+
+  .collection-panel--allpoints .allpoints-cell,
+  .collection-panel--winigami .winigami-cell {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+  }
+
+  .collection-panel--winigami .winigami-grid {
+    display: inline-grid;
+    width: max-content;
+    max-width: none;
+    gap: 3px;
+    grid-template-columns: 36px repeat(10, 44px) !important;
+    grid-template-rows: auto !important;
+  }
+
+  .nfl-mvp-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.4rem;
+  }
+
+  .nfl-mvp-cell {
+    min-height: 44px;
+    height: auto;
+    padding: 0.45rem 0.2rem;
+    font-size: 0.78rem;
+  }
+}
+
+@media (max-width: 768px) {
+  #achievements-panel .badge-flip-card-back {
+    display: none;
+  }
+  #achievements-panel .badge-flip-card.flipped .badge-flip-card-inner {
+    transform: none;
+  }
+
+  .yw-badge-sheet:not([hidden]) {
+    display: block;
+  }
+
+  @keyframes yw-sheet-slide-in {
+    from {
+      transform: translateY(100%);
+    }
+    to {
+      transform: translateY(0);
+    }
+  }
+  @keyframes yw-sheet-slide-out {
+    from {
+      transform: translateY(0);
+    }
+    to {
+      transform: translateY(100%);
+    }
+  }
+
+  .yw-badge-sheet-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    background: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    opacity: 0;
+    transition: opacity 250ms ease-out;
+  }
+  .yw-badge-sheet.is-open .yw-badge-sheet-overlay {
+    opacity: 1;
+  }
+  .yw-badge-sheet.is-closing .yw-badge-sheet-overlay {
+    opacity: 0;
+  }
+
+  .yw-badge-sheet-panel {
+    --badge-accent-color: #eab308;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    max-height: 60vh;
+    overflow: auto;
+    padding: 0.35rem 1.5rem 1.5rem;
+    border-radius: 24px 24px 0 0;
+    background: #121212;
+    border: 1px solid var(--badge-accent-color);
+    border-bottom: 0;
+    box-shadow:
+      0 -12px 40px rgba(0, 0, 0, 0.55),
+      0 -8px 28px color-mix(in srgb, var(--badge-accent-color) 32%, transparent);
+    transform: translateY(100%);
+  }
+  .yw-badge-sheet.is-open .yw-badge-sheet-panel {
+    animation: yw-sheet-slide-in 250ms ease-out forwards;
+  }
+  .yw-badge-sheet.is-closing .yw-badge-sheet-panel {
+    animation: yw-sheet-slide-out 250ms ease-out forwards;
+  }
+
+  .yw-badge-sheet-handle {
+    width: 36px;
+    height: 4px;
+    margin: 8px auto 16px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  .yw-badge-sheet-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 80px;
+    height: 80px;
+    margin: 0 auto 0.85rem;
+    border-radius: 50%;
+    font-size: 2.7rem;
+    line-height: 1;
+    background: radial-gradient(
+      circle at 35% 30%,
+      color-mix(in srgb, var(--badge-accent-color) 28%, #1a1a1a),
+      #111 72%
+    );
+    border: 2px solid var(--badge-accent-color);
+    box-shadow:
+      0 0 0 4px color-mix(in srgb, var(--badge-accent-color) 18%, transparent),
+      0 0 28px color-mix(in srgb, var(--badge-accent-color) 45%, transparent);
+  }
+
+  .yw-badge-sheet-title {
+    margin: 0 0 0.4rem;
+    color: var(--badge-accent-color);
+    font-size: 1.28rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    line-height: 1.15;
+    text-align: center;
+    text-transform: uppercase;
+  }
+  .yw-badge-sheet-score {
+    margin: 0 0 0.45rem;
+    color: var(--badge-accent-color);
+    font-size: 1.05rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    line-height: 1.1;
+    text-align: center;
+    text-transform: uppercase;
+  }
+
+  .yw-badge-sheet-sub {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    margin: 0 0 1rem;
+    color: var(--badge-accent-color);
+    font-size: 0.85rem;
+    font-weight: 600;
+    line-height: 1.4;
+    text-align: center;
+  }
+  .yw-badge-sheet-cat-icon {
+    font-size: 1rem;
+    line-height: 1;
+  }
+
+  .yw-badge-sheet-stats {
+    list-style: none;
+    margin: 0 0 1.15rem;
+    padding: 0;
+  }
+  .yw-badge-sheet-stats li {
+    position: relative;
+    margin: 0 0 0.5rem;
+    padding: 0.55rem 0.9rem 0.55rem 1.55rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--badge-accent-color) 10%, transparent);
+    color: var(--badge-accent-color);
+    font-size: 0.9rem;
+    line-height: 1.6;
+  }
+  .yw-badge-sheet-stats li::before {
+    content: "";
+    position: absolute;
+    left: 0.65rem;
+    top: 50%;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--badge-accent-color);
+    box-shadow: 0 0 8px var(--badge-accent-color);
+    transform: translateY(-50%);
+  }
+
+  .yw-badge-sheet-close {
+    display: block;
+    width: 100%;
+    padding: 12px 0;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--badge-accent-color);
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+
+  .yw-record-sheet--alltime {
+    --badge-accent-color: #ffd700;
+  }
+  .yw-record-sheet--season {
+    --badge-accent-color: #c5ccd6;
+  }
+
+  body.yw-sheet-open {
+    overflow: hidden;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .yw-badge-sheet-overlay {
+      transition: none;
+    }
+    .yw-badge-sheet.is-open .yw-badge-sheet-panel,
+    .yw-badge-sheet.is-closing .yw-badge-sheet-panel {
+      animation: none;
+      transform: translateY(0);
+    }
+    .yw-badge-sheet.is-closing .yw-badge-sheet-panel {
+      transform: translateY(100%);
+    }
   }
 }

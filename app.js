@@ -174,6 +174,7 @@
       leagueCollections: null,
       collectionsComputing: false,
       collectionsCollapsed: {},
+      dashNavMoreOpen: false,
       archivesTab: "collections",
       archivesSeason: null,
       winigamiExpandedScore: null,
@@ -6080,17 +6081,41 @@
       return `${Number(record.value).toFixed(1)} pts`;
     }
 
-    function formatWallPlaqueMeta(record) {
+    function formatHallWhenLine(record, { streak = false } = {}) {
       if (!record) return "";
       const bits = [];
-      if (record.playerName) bits.push(String(record.playerName));
-      if (record.week != null && Number.isFinite(Number(record.week))) {
+      if (streak && record.weekStart != null) {
+        const start = record.weekStart ?? record.week;
+        const end = record.weekEnd ?? record.week;
+        bits.push(start === end ? `Week ${start}` : `Weeks ${start}–${end}`);
+      } else if (record.week != null && Number.isFinite(Number(record.week))) {
         bits.push(`Week ${Number(record.week)}`);
       }
       if (record.season != null && String(record.season).trim()) {
         bits.push(String(record.season));
       }
       return bits.join(" · ");
+    }
+
+    function formatWallPlaqueCaption(meta, record) {
+      if (!record) return { subject: "", when: "" };
+      let subject = "";
+      if (meta?.key === "theNuke") {
+        subject = "Team Points";
+      } else if (record.playerName) {
+        subject = String(record.playerName);
+      }
+      return { subject, when: formatHallWhenLine(record) };
+    }
+
+    function renderHallCaptionHtml(subject, when, subjectClass, whenClass) {
+      return `${
+        subject
+          ? `<p class="${subjectClass}">${escapeHtml(subject)}</p>`
+          : ""
+      }${
+        when ? `<p class="${whenClass}">${escapeHtml(when)}</p>` : ""
+      }`;
     }
 
     function renderWallRecordPlaque(meta, record, variant) {
@@ -6109,7 +6134,7 @@
         </article>`;
       }
       const holder = record.holder || record.winner || "—";
-      const metaLine = formatWallPlaqueMeta(record);
+      const { subject, when } = formatWallPlaqueCaption(meta, record);
       return `
         <article class="wall-record-plaque${variantClass}">
           <p class="wall-record-plaque-title">${escapeHtml(title)}</p>
@@ -6117,11 +6142,12 @@
             <p class="wall-record-plaque-value">${escapeHtml(
               formatWallPlaqueValue(record)
             )}</p>
-            ${
-              metaLine
-                ? `<p class="wall-record-plaque-meta">${escapeHtml(metaLine)}</p>`
-                : ""
-            }
+            ${renderHallCaptionHtml(
+              subject,
+              when,
+              "wall-record-plaque-subject",
+              "wall-record-plaque-meta"
+            )}
           </div>
           <h3 class="wall-record-plaque-holder">${escapeHtml(holder)}</h3>
         </article>`;
@@ -7632,14 +7658,19 @@
           const chips =
             row.parts.length > 0
               ? `<div class="belt-lb-chips">${row.parts
-                  .map(
-                    (p) => `
-                <span class="belt-lb-chip">
+                  .map((p) => {
+                    const tip = getBadgeChipTip(p.badgeKey);
+                    return `
+                <button type="button" class="belt-lb-chip" data-belt-chip data-tooltip="${escapeHtml(
+                  tip
+                )}" aria-label="${escapeHtml(
+                      `${p.name}: ${tip}`
+                    )}">
                   <span>${p.icon}</span>
                   <span>${escapeHtml(p.name)}</span>
                   <span class="chip-count">×${p.count}</span>
-                </span>`
-                  )
+                </button>`;
+                  })
                   .join("")}</div>`
               : `<p class="belt-lb-empty">No badges in this category</p>`;
 
@@ -7711,6 +7742,41 @@
       };
     }
 
+
+    function getBadgeChipTip(badgeKey) {
+      const def = BADGE_DEFINITIONS[badgeKey];
+      const icon = def?.icon || "🏅";
+      const short =
+        (typeof BADGE_CHIP_TIPS !== "undefined" &&
+          BADGE_CHIP_TIPS[badgeKey]) ||
+        BADGE_CARD_BLURBS[badgeKey] ||
+        getBadgeCardBlurb(badgeKey, def?.description);
+      return `${icon} ${short}`;
+    }
+
+    function bindBeltChipTips(root) {
+      if (!root) return;
+      root.querySelectorAll("[data-belt-chip]").forEach((chip) => {
+        chip.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const alreadyOpen = chip.classList.contains("is-tip");
+          document
+            .querySelectorAll("[data-belt-chip].is-tip")
+            .forEach((el) => el.classList.remove("is-tip"));
+          if (!alreadyOpen) chip.classList.add("is-tip");
+        });
+      });
+      if (!window.__beltChipTipsBound) {
+        window.__beltChipTipsBound = true;
+        document.addEventListener("click", (event) => {
+          if (event.target.closest("[data-belt-chip]")) return;
+          document
+            .querySelectorAll("[data-belt-chip].is-tip")
+            .forEach((el) => el.classList.remove("is-tip"));
+        });
+      }
+    }
 
     function getBadgeCardBlurb(tileKey, description) {
       if (BADGE_CARD_BLURBS[tileKey]) return BADGE_CARD_BLURBS[tileKey];
@@ -8459,6 +8525,223 @@
         ${extremeHtml}`;
     }
 
+    function wallHtmlToPlainText(html) {
+      return String(html || "")
+        .replace(/<br\s*\/?>/gi, " · ")
+        .replace(/<\/(div|p|li|h\d)>/gi, " · ")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/&nbsp;/g, " ")
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&#39;/g, "'")
+        .replace(/&quot;/g, '"')
+        .replace(/\s+/g, " ")
+        .replace(/(?:\s*·\s*)+/g, " · ")
+        .replace(/^\s*·\s*|\s*·\s*$/g, "")
+        .trim();
+    }
+
+    function formatWallHistoryWhenLine(inst, extra) {
+      return [
+        extra,
+        inst?.week != null && Number.isFinite(Number(inst.week))
+          ? `Week ${Number(inst.week)}`
+          : "",
+        inst?.season != null && String(inst.season).trim()
+          ? String(inst.season)
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" · ");
+    }
+
+    function collectBadgeHistorySheetPills(
+      tileMeta,
+      filteredHistory,
+      scope,
+      seasonFilter
+    ) {
+      const ownerId = getWallBadgesViewOwnerId();
+      const myEntry = filteredHistory?.byManager?.[ownerId]?.[tileMeta.key];
+      const leagueEntry = filteredHistory?.byBadge?.[tileMeta.key];
+      const cfg =
+        BADGE_EXTREME_CONFIG[tileMeta.key] ||
+        (tileMeta.familyKeys || [])
+          .map((k) => BADGE_EXTREME_CONFIG[k])
+          .find(Boolean) ||
+        {};
+      const scoringRecord = isScoringRecordBadgeKey(tileMeta.key);
+      const pills = [];
+
+      if (scope === "league") {
+        const total = leagueEntry?.totalCount || 0;
+        if (!total) {
+          pills.push("NEVER EARNED IN THIS LEAGUE");
+          if (tileMeta.description) pills.push(tileMeta.description);
+          pills.push("Be the first.");
+          return pills;
+        }
+        const managersRanked = Object.entries(leagueEntry.byManager || {})
+          .map(([rid, m]) => ({
+            rosterId: rid,
+            name: m.managerName,
+            count: m.count,
+            instances: m.instances,
+          }))
+          .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+        const topCount = managersRanked[0]?.count || 0;
+        const managers = managersRanked.filter((m) => m.count === topCount);
+        const decoratedNames = managers.map((m) => m.name).filter(Boolean);
+        if (decoratedNames.length) {
+          pills.push(
+            `MOST DECORATED · ${decoratedNames.join(" · ")} (×${topCount})`
+          );
+        }
+        if (scoringRecord) {
+          const notables = pickScoringRecordNotableInstances(
+            leagueEntry,
+            seasonFilter || "allTime"
+          );
+          const top = notables.slice(0, seasonFilter === "allTime" ? 1 : 3);
+          if (top.length) {
+            const sectionLabel =
+              seasonFilter === "allTime"
+                ? "ALL-TIME HIGHEST SCORE"
+                : "NOTABLE INSTANCES";
+            top.forEach((inst, idx) => {
+              const score = scoringRecordInstanceScore(inst);
+              const scoreLabel = Number.isFinite(score)
+                ? `${score.toFixed(1)} pts`
+                : "";
+              const detail =
+                scoreLabel ||
+                wallInstanceDataLines(inst.dataLines)[0] ||
+                "";
+              const line = [
+                idx === 0 ? sectionLabel : "",
+                inst.managerName,
+                formatWallHistoryWhenLine(inst),
+                detail,
+              ]
+                .filter(Boolean)
+                .join(" · ");
+              if (line) pills.push(line);
+            });
+          }
+        } else if (cfg.quantifiable && leagueEntry.extremeInstance) {
+          const ex = leagueEntry.extremeInstance;
+          const body = wallHtmlToPlainText(
+            renderWallExtremeScoreBody(tileMeta.key, ex, cfg)
+          );
+          pills.push(
+            [
+              "MOST EXTREME INSTANCE",
+              ex.managerName,
+              formatWallHistoryWhenLine(ex),
+              body,
+            ]
+              .filter(Boolean)
+              .join(" · ")
+          );
+        } else if (!cfg.noNotables && (cfg.supplemental || !cfg.quantifiable)) {
+          const notables = [];
+          for (const m of Object.values(leagueEntry.byManager || {})) {
+            for (const inst of m.instances || []) {
+              notables.push({ managerName: m.managerName, ...inst });
+            }
+          }
+          notables.sort(
+            (a, b) => Number(b.season) - Number(a.season) || b.week - a.week
+          );
+          notables.slice(0, 3).forEach((inst, idx) => {
+            const detail =
+              formatWallBadgeInstanceDetail(tileMeta.key, inst) ||
+              wallInstanceDataLines(inst.dataLines)[0] ||
+              "";
+            const line = [
+              idx === 0 ? "NOTABLE INSTANCES" : "",
+              inst.managerName,
+              formatWallHistoryWhenLine(inst),
+              detail,
+            ]
+              .filter(Boolean)
+              .join(" · ");
+            if (line) pills.push(line);
+          });
+        }
+        return pills;
+      }
+
+      const count = myEntry?.count || 0;
+      const instances = [...(myEntry?.instances || [])].sort((a, b) =>
+        compareInstancesByExtreme(a, b, cfg, scoringRecord)
+      );
+      if (!count) {
+        pills.push("NOT YET EARNED");
+        if (tileMeta.description) pills.push(tileMeta.description);
+        return pills;
+      }
+      pills.push(`×${count} earned`);
+      if (cfg.quantifiable) {
+        let best = null;
+        const pool =
+          scoringRecord && (seasonFilter === "allTime" || !seasonFilter)
+            ? instances.filter(
+                (inst) =>
+                  !inst.badgeId || !String(inst.badgeId).endsWith("-season")
+              )
+            : instances;
+        const searchPool = pool.length ? pool : instances;
+        for (const inst of searchPool) {
+          const val =
+            inst.extremeValue != null
+              ? Number(inst.extremeValue)
+              : scoringRecord
+                ? scoringRecordInstanceScore(inst)
+                : null;
+          if (
+            isMoreExtreme(
+              val,
+              best?.extremeValue ??
+                (best ? scoringRecordInstanceScore(best) : null),
+              !!cfg.lowerIsBetter
+            )
+          ) {
+            best = { ...inst, extremeValue: val };
+          }
+        }
+        if (best) {
+          const extremeLabel =
+            scoringRecord && (seasonFilter === "allTime" || !seasonFilter)
+              ? "ALL-TIME HIGHEST SCORE"
+              : "MOST EXTREME";
+          const body = wallHtmlToPlainText(
+            renderWallExtremeScoreBody(tileMeta.key, best, cfg)
+          );
+          pills.push(
+            [extremeLabel, formatWallHistoryWhenLine(best), body]
+              .filter(Boolean)
+              .join(" · ")
+          );
+        }
+      }
+      instances.forEach((inst) => {
+        const formatted = formatWallBadgeInstanceDetail(tileMeta.key, inst);
+        const primary = wallInstanceDataLines(inst.dataLines)[0];
+        const brief =
+          formatted != null && formatted !== ""
+            ? formatted
+            : primary ||
+              (tileMeta.familyKeys?.length > 1 ? inst.name : "");
+        const line = [formatWallHistoryWhenLine(inst), brief]
+          .filter(Boolean)
+          .join(" · ");
+        if (line) pills.push(line);
+      });
+      return pills;
+    }
+
     function renderWallBadgeTile(tileKey, filteredHistory, scope, bucketId) {
       const tileMeta = getTileDisplayMeta(tileKey);
       const ownerId = getWallBadgesViewOwnerId();
@@ -8499,6 +8782,19 @@
         resolvedBucket === "nuggets"
           ? ` data-category-theme="${escapeHtml(categoryId)}"`
           : "";
+      if (!state.badgeHistorySheetMap) state.badgeHistorySheetMap = {};
+      state.badgeHistorySheetMap[tileKey] = {
+        key: tileKey,
+        name: tileMeta.name,
+        icon: tileMeta.icon,
+        categoryId,
+        pills: collectBadgeHistorySheetPills(
+          tileMeta,
+          filteredHistory,
+          scope,
+          state.wallBadgesSeason || "allTime"
+        ),
+      };
       const inner = `
               ${tagsHtml}
               <div class="yw-card-crest badge-icon-wrapper"${crestTheme}>
@@ -8517,7 +8813,7 @@
       return `
         <div class="badge-flip-card ${flipped ? "flipped" : ""}" data-badge-tile="${escapeHtml(
           tileKey
-        )}">
+        )}" role="button" tabindex="0">
           <div class="badge-flip-card-inner">
             <div class="badge-flip-card-front yw-card ${typeClass} ${
               earned ? "is-earned" : "is-unearned"
@@ -8611,6 +8907,7 @@
         seasonFilter === "allTime" ? "allTime" : seasonFilter,
         weekThrough
       );
+      state.badgeHistorySheetMap = {};
 
       const beltCats = getBadgeBeltCategoryDefs();
       const beltById = Object.fromEntries(beltCats.map((c) => [c.id, c]));
@@ -8716,13 +9013,25 @@
 
     function bindWallBadgesInteractions(panel) {
       panel.querySelectorAll("[data-badge-tile]").forEach((card) => {
-        card.addEventListener("click", (e) => {
-          if (e.target.closest("[data-badge-expand]")) return;
-          e.stopPropagation();
+        const openOrFlip = () => {
           const key = card.dataset.badgeTile;
+          if (window.matchMedia("(max-width: 768px)").matches) {
+            openYourWeekBadgeSheet(key);
+            return;
+          }
           state.wallBadgesFlippedKey =
             state.wallBadgesFlippedKey === key ? null : key;
           renderBadgesAchievementsPage();
+        };
+        card.addEventListener("click", (e) => {
+          if (e.target.closest("[data-badge-expand]")) return;
+          e.stopPropagation();
+          openOrFlip();
+        });
+        card.addEventListener("keydown", (e) => {
+          if (e.key !== "Enter" && e.key !== " ") return;
+          e.preventDefault();
+          openOrFlip();
         });
       });
       panel.querySelectorAll("[data-badge-expand]").forEach((btn) => {
@@ -9160,40 +9469,28 @@
       return `${v.toFixed(Math.abs(v) < 10 ? 2 : 1)} pts`;
     }
 
-    function formatPainTombstoneMeta(meta, record) {
-      if (!record) return "";
-      const bits = [];
+    function formatPainTombstoneCaption(meta, record) {
+      if (!record) return { subject: "", when: "" };
+      let subject = "";
       if (record.playerName) {
         const pos = record.playerPosition || record.position;
-        bits.push(
-          pos ? `${record.playerName} (${pos})` : String(record.playerName)
-        );
+        subject = pos
+          ? `${record.playerName} (${pos})`
+          : String(record.playerName);
       } else if (meta.key === "worstLineupEfficiency") {
         const left = Number(record.pointsLeftOnBench);
-        const actual = Number(record.actualScore);
-        const optimal = Number(record.optimalScore);
         if (Number.isFinite(left)) {
-          bits.push(`${left.toFixed(1)} pts left on the bench`);
-        }
-        if (Number.isFinite(actual) && Number.isFinite(optimal)) {
-          bits.push(`${actual.toFixed(1)} of ${optimal.toFixed(1)} optimal`);
+          subject = `${left.toFixed(1)} pts left on the bench`;
         }
       } else if (record.opponentName) {
-        bits.push(`vs ${record.opponentName}`);
+        subject = `vs ${record.opponentName}`;
       }
-      if (meta.key === "longestLosingStreak" && record.weekStart != null) {
-        const start = record.weekStart ?? record.week;
-        const end = record.weekEnd ?? record.week;
-        bits.push(
-          start === end ? `Week ${start}` : `Weeks ${start}–${end}`
-        );
-      } else if (record.week != null) {
-        bits.push(`Week ${Number(record.week)}`);
-      }
-      if (record.season != null && String(record.season).trim()) {
-        bits.push(String(record.season));
-      }
-      return bits.join(" · ");
+      return {
+        subject,
+        when: formatHallWhenLine(record, {
+          streak: meta.key === "longestLosingStreak",
+        }),
+      };
     }
 
     function renderPainStatCard(meta, record, variant) {
@@ -9206,23 +9503,28 @@
         return `
         <article class="pain-tombstone pain-tombstone--empty${variantClass}">
           <p class="pain-tombstone-title">${escapeHtml(title)}</p>
-          <p class="pain-tombstone-value">—</p>
-          <p class="pain-tombstone-meta">No data yet</p>
+          <div class="pain-tombstone-body">
+            <p class="pain-tombstone-value">—</p>
+            <p class="pain-tombstone-meta">No data yet</p>
+          </div>
           <h3 class="pain-tombstone-holder">Unclaimed</h3>
         </article>`;
       }
-      const metaLine = formatPainTombstoneMeta(meta, record);
+      const { subject, when } = formatPainTombstoneCaption(meta, record);
       return `
         <article class="pain-tombstone${variantClass}">
           <p class="pain-tombstone-title">${escapeHtml(title)}</p>
-          <p class="pain-tombstone-value">${escapeHtml(
-            formatPainTombstoneValue(meta, record)
-          )}</p>
-          ${
-            metaLine
-              ? `<p class="pain-tombstone-meta">${escapeHtml(metaLine)}</p>`
-              : ""
-          }
+          <div class="pain-tombstone-body">
+            <p class="pain-tombstone-value">${escapeHtml(
+              formatPainTombstoneValue(meta, record)
+            )}</p>
+            ${renderHallCaptionHtml(
+              subject,
+              when,
+              "pain-tombstone-subject",
+              "pain-tombstone-meta"
+            )}
+          </div>
           <h3 class="pain-tombstone-holder">${escapeHtml(
             record.holder || "—"
           )}</h3>
@@ -9275,6 +9577,7 @@
           renderWallOfFame();
         });
       });
+      bindBeltChipTips(panel);
     }
 
     function getWallScoringSeasonYear() {
@@ -12581,12 +12884,25 @@
         <div class="nfl-mvp-grid">${gridHtml}</div>`;
     }
 
-    function renderCollectionPanel(id, title, borderClass, bodyHtml) {
-      const collapsed = state.collectionsCollapsed[id];
+    function isCollectionCollapsed(id) {
+      if (Object.prototype.hasOwnProperty.call(state.collectionsCollapsed, id)) {
+        return !!state.collectionsCollapsed[id];
+      }
+      return isMobileDashNav();
+    }
+
+    function renderCollectionPanel(id, title, borderClass, bodyHtml, summaryText = "") {
+      const collapsed = isCollectionCollapsed(id);
+      const summary = summaryText
+        ? `<p class="collection-panel-summary">${escapeHtml(summaryText)}</p>`
+        : "";
       return `
         <div class="collection-panel ${borderClass}">
-          <div class="collection-panel-header" data-collection="${id}">
-            <h3>${escapeHtml(title)}</h3>
+          <div class="collection-panel-header" data-collection="${id}" role="button" tabindex="0" aria-expanded="${!collapsed}">
+            <div class="collection-panel-heading">
+              <h3>${escapeHtml(title)}</h3>
+              ${summary}
+            </div>
             <span class="collection-panel-chevron">${collapsed ? "▼" : "▲"}</span>
           </div>
           <div class="collection-panel-body ${collapsed ? "collapsed" : ""}">${bodyHtml}</div>
@@ -12597,13 +12913,17 @@
       const data = state.leagueCollections;
       if (state.collectionsComputing || !data) return "";
       const recentWeek = getMostRecentCollectionWeek();
+      const winigamiDone = data.winigami?.achieved?.size || 0;
+      const sacredDone = Object.keys(data.sacredScores?.achieved || {}).length;
+      const nflDone = data.nflTeamMvp?.achieved?.size || 0;
       return `
         <div class="collections-binder">
         <p class="collections-overall">Overall completion: <strong>${data.overallCompletionPct.toFixed(1)}%</strong> across all collections</p>
-        ${renderCollectionPanel("allpoints", "AllPoints", "collection-panel--allpoints", renderAllPointsPanel(data, recentWeek))}
-        ${renderCollectionPanel("winigami", "Winigami", "collection-panel--winigami", renderWinigamiPanel(data, recentWeek))}
-        ${renderCollectionPanel("nflmvp", "Highest Weekly Scorer — Every NFL Team", "collection-panel--nfl", renderNflMvpPanel(data, recentWeek))}
-        ${renderCollectionPanel("sacred", "Sacred Scores", "collection-panel--sacred", renderSacredScoresPanel(data, recentWeek))}
+        <p class="collections-mobile-hint">Tap a collection to explore the full board.</p>
+        ${renderCollectionPanel("allpoints", "AllPoints", "collection-panel--allpoints", renderAllPointsPanel(data, recentWeek), `${data.allPoints.achieved.size} of ${data.allPoints.total} scores`)}
+        ${renderCollectionPanel("winigami", "Winigami", "collection-panel--winigami", renderWinigamiPanel(data, recentWeek), `${winigamiDone} of ${data.winigami.totalPossible} winning scores`)}
+        ${renderCollectionPanel("nflmvp", "Highest Weekly Scorer — Every NFL Team", "collection-panel--nfl", renderNflMvpPanel(data, recentWeek), `${nflDone} of ${data.nflTeamMvp.total} NFL teams`)}
+        ${renderCollectionPanel("sacred", "Sacred Scores", "collection-panel--sacred", renderSacredScoresPanel(data, recentWeek), `${sacredDone} of ${data.sacredScores.total} sacred scores`)}
         </div>`;
     }
 
@@ -12613,10 +12933,17 @@
       panel.innerHTML = renderLeagueCollectionsBody();
 
       panel.querySelectorAll(".collection-panel-header").forEach((el) => {
-        el.addEventListener("click", () => {
+        const toggle = () => {
           const id = el.dataset.collection;
-          state.collectionsCollapsed[id] = !state.collectionsCollapsed[id];
+          state.collectionsCollapsed[id] = !isCollectionCollapsed(id);
           renderLeagueCollections();
+        };
+        el.addEventListener("click", toggle);
+        el.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            toggle();
+          }
         });
       });
 
@@ -15762,11 +16089,184 @@
         .join("");
     }
 
+    function getPriorScoringRecordHolder(key, week, seasonYear, scope) {
+      const race = state.recordRace?.[String(seasonYear)];
+      const w = Number(week);
+      if (scope === "alltime") {
+        if (w > 1) {
+          const prev = race?.alltimeRecordStateByWeek?.[w - 1]?.[key];
+          if (prev) return prev;
+        }
+        return baselineHolderForWatch(race, key);
+      }
+      if (w > 1) {
+        return race?.seasonRecordStateByWeek?.[w - 1]?.[key] || null;
+      }
+      return null;
+    }
+
+    function countManagerScoringRecords(rosterId, week, seasonYear, scope) {
+      const race = state.recordRace?.[String(seasonYear)];
+      const rosters =
+        state.seasonData?.[String(seasonYear)]?.rosters || state.rosters || [];
+      const weekState =
+        scope === "season"
+          ? race?.seasonRecordStateByWeek?.[week] ||
+            race?.seasonRecordStateByWeek?.[Number(week)] ||
+            race?.seasonRecordStateByWeek?.[String(week)]
+          : null;
+      let n = 0;
+      for (const key of SCORING_RECORD_KEYS) {
+        const holder =
+          scope === "alltime"
+            ? resolveAlltimeHolderForWatch(race, key, week)
+            : weekState?.[key];
+        if (managerHoldsScoringRecord(holder, rosterId, rosters)) n++;
+      }
+      return n;
+    }
+
+    function withRecordPlayerName(statKey, holder, seasonYear) {
+      if (!holder) return holder;
+      if (holder.playerName) return holder;
+      const rec = state.recordsAndMilestones?.records?.[statKey];
+      if (
+        rec?.playerName &&
+        holder.rosterId != null &&
+        Number(rec.rosterId ?? rec.roster_id) === Number(holder.rosterId)
+      ) {
+        return { ...holder, playerName: rec.playerName };
+      }
+      return holder;
+    }
+
+    function formatRecordSheetWhen(holder) {
+      if (!holder) return "";
+      const week = holder.weekSet ?? holder.week;
+      const season = holder.seasonSet ?? holder.season;
+      if (week != null && season != null) return `Week ${week} · ${season}`;
+      if (week != null) return `Week ${week}`;
+      if (season != null) return String(season);
+      return "";
+    }
+
+    function formatRecordSheetPreviousPill(statKey, previous, isAlltime) {
+      const value = Number(previous?.value ?? previous?.benchScore);
+      if (!previous || !Number.isFinite(value)) {
+        return isAlltime
+          ? "First mark in league history"
+          : "First mark this season";
+      }
+      const val = formatRaceValue(statKey, value);
+      const manager =
+        previous.managerName || previous.holder || previous.winner || "Unknown";
+      const player = previous.playerName;
+      const when = formatRecordSheetWhen(previous);
+      const who = player ? `${player} (${manager})` : manager;
+      return [`Previous record: ${val} pts`, who, when]
+        .filter(Boolean)
+        .join(" · ");
+    }
+
+    function formatRecordSheetAlltimeGapPill(statKey, currentValue, alltime) {
+      const alltimeVal = Number(alltime?.value ?? alltime?.benchScore);
+      if (!alltime || !Number.isFinite(alltimeVal)) {
+        return "No all-time record yet";
+      }
+      const current = Number(currentValue);
+      const gap = Number.isFinite(current) ? alltimeVal - current : alltimeVal;
+      const recordLabel = `${formatRaceValue(statKey, alltimeVal)} pts`;
+      const gapText =
+        gap <= 0.049
+          ? `Tied with the all-time record of ${recordLabel}`
+          : `${gap.toFixed(1)} pts from the all-time record of ${recordLabel}`;
+      const manager =
+        alltime.managerName || alltime.holder || alltime.winner || "Unknown";
+      const player = alltime.playerName;
+      const when = formatRecordSheetWhen(alltime);
+      return [gapText, manager, player, when].filter(Boolean).join(" · ");
+    }
+
+    function markYourWeekMobileRecordTile(payload) {
+      const id = String(
+        payload?.id || `record-${payload?.scope || "season"}-${payload?.key || "x"}`
+      );
+      if (!state.yourWeekRecordSheetMap) state.yourWeekRecordSheetMap = {};
+      state.yourWeekRecordSheetMap[id] = payload;
+      return {
+        extraClass: " yw-mobile-record-tile",
+        dataAttr: ` data-yw-open-record="${escapeHtml(id)}" role="button" tabindex="0"`,
+      };
+    }
+
+    function buildYourWeekRecordSheetPayload({
+      key,
+      isAlltime,
+      rosterId,
+      week,
+      seasonYear,
+      scoreLabel,
+      player,
+      title,
+      icon,
+    }) {
+      const scope = isAlltime ? "alltime" : "season";
+      const race = state.recordRace?.[String(seasonYear)];
+      const previous = withRecordPlayerName(
+        key,
+        getPriorScoringRecordHolder(key, week, seasonYear, scope),
+        seasonYear
+      );
+      const held = countManagerScoringRecords(
+        rosterId,
+        week,
+        seasonYear,
+        scope
+      );
+      const total = SCORING_RECORD_KEYS.length;
+      const currentValue = Number(
+        String(scoreLabel || "").replace(/[^\d.-]/g, "")
+      );
+      const pills = [
+        formatRecordSheetPreviousPill(key, previous, isAlltime),
+      ];
+      if (isAlltime) {
+        pills.push(`${held}/${total} all-time records held`);
+      } else {
+        const alltime = withRecordPlayerName(
+          key,
+          resolveAlltimeHolderForWatch(race, key, week),
+          seasonYear
+        );
+        pills.push(
+          formatRecordSheetAlltimeGapPill(key, currentValue, alltime)
+        );
+        pills.push(`${held}/${total} season records held`);
+      }
+      let pts = String(scoreLabel || "").trim();
+      if (pts && !/pts/i.test(pts)) pts = `${pts} PTS`;
+      else if (pts) pts = pts.replace(/\s*pts\.?/i, " PTS");
+      return {
+        id: `record-${scope}-${key}`,
+        key,
+        scope,
+        isAlltime,
+        title: title || scoringTitleName(key, scope) || "RECORD",
+        icon: icon || scoringTitleIcon(key, scope),
+        scoreLabel: pts || "—",
+        player: player || "",
+        pills,
+      };
+    }
+
     function renderYourWeekRecordPlaque({
       categoryTitle,
       scoreLabel,
-      detailLine,
+      subjectLine,
+      whenLine,
       isAlltime,
+      extraClass = "",
+      dataAttr = "",
     }) {
       const variantClass = isAlltime ? "" : " yw-record-plaque--silver";
       const tierLabel = isAlltime ? "ALL-TIME RECORD" : "SEASON RECORD";
@@ -15775,15 +16275,22 @@
       else if (pts) pts = pts.replace(/\s*pts\.?/i, " PTS");
       if (!pts) pts = "—";
       return `
-        <article class="yw-card yw-record-plaque${variantClass}">
+        <article class="yw-card yw-record-plaque${variantClass}${extraClass}"${dataAttr}>
           <p class="yw-record-plaque-title">${escapeHtml(
             String(categoryTitle || "").toUpperCase()
           )}</p>
           <div class="yw-record-plaque-body">
             <p class="yw-record-plaque-value">${escapeHtml(pts)}</p>
             ${
-              detailLine
-                ? `<p class="yw-record-plaque-meta">${escapeHtml(detailLine)}</p>`
+              subjectLine
+                ? `<p class="yw-record-plaque-subject">${escapeHtml(
+                    subjectLine
+                  )}</p>`
+                : ""
+            }
+            ${
+              whenLine
+                ? `<p class="yw-record-plaque-when">${escapeHtml(whenLine)}</p>`
                 : ""
             }
           </div>
@@ -15804,6 +16311,7 @@
       extraClass = "",
       descClass = "",
       narrativeHtml = "",
+      dataAttr = "",
     }) {
       const typeClass =
         bucketId === "infamy"
@@ -15854,12 +16362,12 @@
       return `
         <article class="badge-card yw-card yw-card--${escapeHtml(
           bucketId
-        )} ${typeClass}${heroClass}${alltimeClass}${extraClass}">
+        )} ${typeClass}${heroClass}${alltimeClass}${extraClass}"${dataAttr}>
           ${body}
         </article>`;
     }
 
-    function renderYourWeekAccomplishmentCard(badge, bucketId, week, seasonYear) {
+    function renderYourWeekAccomplishmentCard(badge, bucketId, week, seasonYear, rosterId) {
       const categoryId = getBadgeCategoryId(badge);
       const resolvedBucket =
         bucketId || getYourWeekBadgeBucketId(badge) || "achievements";
@@ -15874,8 +16382,10 @@
         if (pm) player = pm[1].trim();
         const weekNum = badge.week ?? week;
         const year = badge.seasonYear ?? seasonYear;
-        const detailLine = [
-          player,
+        const key = scoringRecordBaseId(badge);
+        const subjectLine =
+          key === "theNuke" ? "Team Points" : player || "";
+        const whenLine = [
           weekNum != null && Number.isFinite(Number(weekNum))
             ? `Week ${Number(weekNum)}`
             : "",
@@ -15883,15 +16393,30 @@
         ]
           .filter(Boolean)
           .join(" · ");
-        return renderYourWeekRecordPlaque({
-          categoryTitle:
-            scoringTitleName(scoringRecordBaseId(badge)) || badge.name || "",
-          scoreLabel: scoreMatch ? scoreMatch[1] : "",
-          detailLine,
+        const payload = buildYourWeekRecordSheetPayload({
+          key,
           isAlltime,
+          rosterId,
+          week,
+          seasonYear,
+          scoreLabel: scoreMatch ? scoreMatch[1] : "",
+          player,
+          title: scoringTitleName(key) || badge.name || "",
+          icon: scoringTitleIcon(key, isAlltime ? "alltime" : "season"),
+        });
+        const tile = markYourWeekMobileRecordTile(payload);
+        return renderYourWeekRecordPlaque({
+          categoryTitle: payload.title,
+          scoreLabel: scoreMatch ? scoreMatch[1] : "",
+          subjectLine,
+          whenLine,
+          isAlltime,
+          extraClass: tile.extraClass,
+          dataAttr: tile.dataAttr,
         });
       }
       const isHero = isScoringTitleBadge(badge) || badge._fromScoringTitle;
+      const tile = markYourWeekMobileBadgeTile(badge);
       return renderYourWeekAwardCard({
         bucketId: resolvedBucket,
         name: badge.name,
@@ -15903,25 +16428,39 @@
         isHero,
         isAlltime,
         isSeasonRecord,
+        extraClass: tile.extraClass,
+        dataAttr: tile.dataAttr,
       });
     }
 
-    function renderYourWeekMilestoneAsAwardCard(m, watch, week, seasonYear) {
+    function renderYourWeekMilestoneAsAwardCard(m, watch, week, seasonYear, rosterId) {
       const display = getYourWeekMilestoneDisplay(m, watch, week, seasonYear);
       const isAlltime = m.scope === "alltime";
-      const detailLine = [
-        m.key === "theNuke" ? "" : display.player,
-        display.weekLabel,
-        display.seasonYear,
-      ]
+      const subjectLine =
+        m.key === "theNuke" ? "Team Points" : display.player || "";
+      const whenLine = [display.weekLabel, display.seasonYear]
         .filter(Boolean)
         .join(" · ");
-      return renderYourWeekRecordPlaque({
-        categoryTitle:
-          scoringTitleName(m.key) || m.name || "TOTAL POINTS",
-        scoreLabel: display.score || "",
-        detailLine,
+      const payload = buildYourWeekRecordSheetPayload({
+        key: m.key,
         isAlltime,
+        rosterId,
+        week,
+        seasonYear,
+        scoreLabel: display.score || "",
+        player: display.player || "",
+        title: scoringTitleName(m.key) || m.name || "TOTAL POINTS",
+        icon: scoringTitleIcon(m.key, isAlltime ? "alltime" : "season"),
+      });
+      const tile = markYourWeekMobileRecordTile(payload);
+      return renderYourWeekRecordPlaque({
+        categoryTitle: payload.title,
+        scoreLabel: display.score || "",
+        subjectLine,
+        whenLine,
+        isAlltime,
+        extraClass: tile.extraClass,
+        dataAttr: tile.dataAttr,
       });
     }
 
@@ -16166,8 +16705,9 @@
       const narrativeHtml = yourWeekBadgeNarrativeHtml(badge);
       const categoryId = getBadgeCategoryId(badge) || "golden_child";
       const beltMarkHtml = yourWeekBeltCornerMark("lucks", categoryId);
+      const tile = markYourWeekMobileBadgeTile(badge);
       return `
-        <article class="lucky-break-card">
+        <article class="lucky-break-card${tile.extraClass}"${tile.dataAttr}>
           <span class="lucky-break-mark" aria-hidden="true">${
             badge.icon || "🍀"
           }</span>
@@ -16199,6 +16739,459 @@
         </section>`;
     }
 
+    function startYourWeekMobileBadgeTiles() {
+      state._ywMobileBadgeIndex = 0;
+      state.yourWeekBadgeSheetMap = {};
+      state.yourWeekRecordSheetMap = {};
+    }
+
+    function markYourWeekMobileBadgeTile(badge) {
+      const index = Number(state._ywMobileBadgeIndex) || 0;
+      state._ywMobileBadgeIndex = index + 1;
+      const id = String(badge?.id || `yw-badge-${index}`);
+      if (!state.yourWeekBadgeSheetMap) state.yourWeekBadgeSheetMap = {};
+      state.yourWeekBadgeSheetMap[id] = badge;
+      return {
+        extraClass: " yw-mobile-badge-tile",
+        dataAttr: ` data-yw-open-badge="${escapeHtml(id)}" role="button" tabindex="0"`,
+      };
+    }
+
+    function getYourWeekSheetAccent(badge) {
+      const categoryId = getBadgeCategoryId(badge);
+      const accents = {
+        apex_predator: "#EAB308",
+        tactician: "#EAB308",
+        scoring_champion: "#FACC15",
+        golden_child: "#22C55E",
+        league_historian: "#38BDF8",
+        tank_commander: "#EF4444",
+        tragic_hero: "#F87171",
+      };
+      if (accents[categoryId]) return accents[categoryId];
+      const theme = getCategoryTheme(categoryId);
+      return theme?.border || "#EAB308";
+    }
+
+    function getYourWeekSheetCategoryIcon(categoryId, badge) {
+      if (badge && (isScoringTitleBadge(badge) || badge._fromScoringTitle)) {
+        return "🏆";
+      }
+      const fallback = {
+        apex_predator: "👑",
+        tactician: "🧠",
+        golden_child: "🍀",
+        league_historian: "💡",
+        tank_commander: "🤡",
+        tragic_hero: "☠️",
+        scoring_champion: "🏆",
+      };
+      const def = getBadgeBeltCategoryDefs().find((c) => c.id === categoryId);
+      return def?.icon || fallback[categoryId] || "🏅";
+    }
+
+    function normalizeYourWeekSheetPhrase(text) {
+      return String(text || "")
+        .toLowerCase()
+        .replace(/[^\w\s]/g, " ")
+        .replace(
+          /\b(the|a|an|of|in|on|this|that|your|you|and|for|with|from|to|at)\b/g,
+          " "
+        )
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+    function yourWeekSheetSignificantWords(text) {
+      const synonyms = {
+        highest: "high",
+        top: "high",
+        lowest: "low",
+        scorer: "score",
+        scoring: "score",
+        scored: "score",
+      };
+      return normalizeYourWeekSheetPhrase(text)
+        .split(" ")
+        .filter((w) => w.length > 1 && !/^\d+(?:\.\d+)?$/.test(w))
+        .map((w) => synonyms[w] || w.replace(/(?:ing|ers|er|ed|es|s)$/i, "") || w);
+    }
+
+    function yourWeekSheetPhrasesOverlap(a, b) {
+      const na = normalizeYourWeekSheetPhrase(a);
+      const nb = normalizeYourWeekSheetPhrase(b);
+      if (!na || !nb) return true;
+      if (na === nb) return true;
+      if (na.includes(nb) || nb.includes(na)) return true;
+      const wa = yourWeekSheetSignificantWords(a);
+      const wb = yourWeekSheetSignificantWords(b);
+      if (!wa.length || !wb.length) return false;
+      const setB = new Set(wb);
+      const hits = wa.filter((w) => setB.has(w)).length;
+      return hits / Math.min(wa.length, wb.length) >= 0.6;
+    }
+
+    function mergeYourWeekSheetPhrases(parts) {
+      const kept = [];
+      for (const raw of parts) {
+        const text = String(raw || "").replace(/\s+/g, " ").trim();
+        if (!text) continue;
+        const dupIdx = kept.findIndex((item) =>
+          yourWeekSheetPhrasesOverlap(item, text)
+        );
+        if (dupIdx < 0) {
+          kept.push(text);
+          continue;
+        }
+        if (text.length > kept[dupIdx].length) kept[dupIdx] = text;
+      }
+      return kept.join(" · ");
+    }
+
+    function hasYourWeekSheetPlayerName(text) {
+      return /[A-Z][A-Za-z'.-]+(?:\s+[A-Z][A-Za-z'.-]+)+/.test(
+        String(text || "")
+      );
+    }
+
+    function hasYourWeekSheetQuantity(text) {
+      const s = String(text || "");
+      return (
+        /-?\d+\.\d+/.test(s) ||
+        /\$\d+/.test(s) ||
+        /#\d+/.test(s) ||
+        /-?\d+(?:\.\d+)?\s*%/.test(s) ||
+        /\b(?:team )?pts\b/i.test(s) ||
+        /\bconsecutive (?:wins|losses)\b/i.test(s) ||
+        /\bleft on (?:your |the )?bench\b/i.test(s) ||
+        /\boptimal points\b/i.test(s) ||
+        /\byears nfl experience\b/i.test(s) ||
+        /\b\d+(?:st|nd|rd|th)\s+(?:birthday|lowest|highest)\b/i.test(s) ||
+        /\bborn on\b/i.test(s)
+      );
+    }
+
+    function classifyYourWeekSheetLine(line, requirement) {
+      const s = String(line || "").trim();
+      if (!s) return { flavor: "", instance: "" };
+
+      const restatesRule =
+        requirement &&
+        yourWeekSheetPhrasesOverlap(s, requirement) &&
+        !hasYourWeekSheetPlayerName(s) &&
+        !/-?\d+\.\d+/.test(s);
+
+      let m = s.match(/^(.+?)\s+(was|were)\s+doing cardio out there\.?$/i);
+      if (m) {
+        return {
+          flavor: `${m[2]} doing cardio out there`,
+          instance: m[1].trim(),
+        };
+      }
+      m = s.match(/^(.+?)\s+put up 0 in your starting lineup\.?$/i);
+      if (m) {
+        return {
+          flavor: "put up 0 in your starting lineup",
+          instance: m[1].trim(),
+        };
+      }
+      m = s.match(/^(\d+)\s+starters scored under 5 pts\.?\s*(.+)$/i);
+      if (m) {
+        return {
+          flavor: `${m[1]} starters scored under 5 pts`,
+          instance: m[2].trim(),
+        };
+      }
+      m = s.match(/^Started\s+(\d+)\s+players wearing the same number$/i);
+      if (m) return { flavor: s, instance: "" };
+      m = s.match(/^Started\s+(\d+)\s+rookies$/i);
+      if (m) return { flavor: s, instance: "" };
+      m = s.match(/^(.+?)\s+all wear\s+#\d+\.?$/i);
+      if (m && hasYourWeekSheetPlayerName(m[1])) {
+        return { flavor: "", instance: s };
+      }
+
+      if (/\.\s+/.test(s)) {
+        const [head, ...rest] = s.split(/\.\s+/);
+        const tail = rest.join(". ").trim();
+        if (
+          head &&
+          tail &&
+          hasYourWeekSheetQuantity(tail) &&
+          !hasYourWeekSheetPlayerName(head) &&
+          !hasYourWeekSheetQuantity(head)
+        ) {
+          return { flavor: head.trim(), instance: tail };
+        }
+      }
+
+      if (restatesRule) return { flavor: s, instance: "" };
+      if (hasYourWeekSheetPlayerName(s) || hasYourWeekSheetQuantity(s)) {
+        return { flavor: "", instance: s };
+      }
+      return { flavor: s, instance: "" };
+    }
+
+    function buildYourWeekSheetCopy(badge) {
+      const key = resolveBadgeKeyFromBadgeOrId(badge);
+      const def = BADGE_DEFINITIONS[key] || {};
+      const requirement =
+        (typeof BADGE_CHIP_TIPS !== "undefined" && BADGE_CHIP_TIPS[key]) ||
+        BADGE_CARD_BLURBS[key] ||
+        def.description ||
+        "";
+      const categoryId = getBadgeCategoryId(badge);
+      const lines = yourWeekBadgeNarrativeLines(badge);
+      const flavorParts = requirement ? [requirement] : [];
+      const instanceParts = [];
+      for (const line of lines) {
+        const classified = classifyYourWeekSheetLine(line, requirement);
+        if (classified.flavor) flavorParts.push(classified.flavor);
+        if (classified.instance) instanceParts.push(classified.instance);
+      }
+
+      let description = mergeYourWeekSheetPhrases(flavorParts);
+      let who = mergeYourWeekSheetPhrases(instanceParts);
+
+      if (!who) {
+        const fallback = lines.find(
+          (line) =>
+            (hasYourWeekSheetPlayerName(line) ||
+              hasYourWeekSheetQuantity(line) ||
+              !yourWeekSheetPhrasesOverlap(line, description)) &&
+            line !== description
+        );
+        who = (fallback || lines[lines.length - 1] || "").trim();
+        if (who && description) {
+          description = mergeYourWeekSheetPhrases(
+            flavorParts.filter(
+              (part) =>
+                part !== who && !yourWeekSheetPhrasesOverlap(part, who)
+            )
+          );
+        }
+      }
+
+      if (!description) description = requirement || def.description || "";
+      if (
+        who &&
+        description &&
+        (who === description ||
+          (yourWeekSheetPhrasesOverlap(description, who) &&
+            !hasYourWeekSheetPlayerName(who) &&
+            !/-?\d+\.\d+/.test(who)))
+      ) {
+        description = requirement || description;
+      }
+      if (!who) who = description;
+      if (!description) description = who;
+
+      return {
+        category: yourWeekBeltMicroLabel(categoryId, badge),
+        categoryIcon: getYourWeekSheetCategoryIcon(categoryId, badge),
+        description,
+        who,
+      };
+    }
+
+    function renderYourWeekBadgeSheet(badge) {
+      if (!badge) return "";
+      const key = resolveBadgeKeyFromBadgeOrId(badge);
+      const def = BADGE_DEFINITIONS[key] || {};
+      const copy = buildYourWeekSheetCopy(badge);
+      const categoryId = getBadgeCategoryId(badge);
+      const accent = getYourWeekSheetAccent(badge);
+      const pills = [
+        `<li class="yw-badge-sheet-stat yw-badge-sheet-stat--desc">${escapeHtml(
+          copy.description || copy.who || ""
+        )}</li>`,
+        `<li class="yw-badge-sheet-stat yw-badge-sheet-stat--who">${escapeHtml(
+          copy.who || copy.description || ""
+        )}</li>`,
+      ];
+      return `
+        <div class="yw-badge-sheet-overlay" data-yw-sheet-close></div>
+        <div class="yw-badge-sheet-panel" role="dialog" aria-modal="true" aria-label="${escapeHtml(
+          badge.name || "Badge details"
+        )}" data-category-theme="${escapeHtml(
+          categoryId || ""
+        )}" style="--badge-accent-color: ${escapeHtml(accent)};">
+          <div class="yw-badge-sheet-handle" aria-hidden="true"></div>
+          <div class="yw-badge-sheet-icon" aria-hidden="true">${
+            badge.icon || def.icon || "🏅"
+          }</div>
+          <h2 class="yw-badge-sheet-title">${escapeHtml(badge.name || "")}</h2>
+          ${
+            copy.category
+              ? `<p class="yw-badge-sheet-sub"><span class="yw-badge-sheet-cat-icon" aria-hidden="true">${copy.categoryIcon}</span><span class="yw-badge-sheet-cat-name">${escapeHtml(
+                  copy.category
+                )}</span></p>`
+              : ""
+          }
+          ${
+            pills.length
+              ? `<ul class="yw-badge-sheet-stats">${pills.join("")}</ul>`
+              : ""
+          }
+          <button type="button" class="yw-badge-sheet-close" data-yw-sheet-close>CLOSE DETAILS</button>
+        </div>`;
+    }
+
+    function renderYourWeekRecordSheet(record) {
+      if (!record) return "";
+      const isAlltime = !!record.isAlltime;
+      const accent = isAlltime ? "#FFD700" : "#C5CCD6";
+      const category = isAlltime ? "All-Time Record" : "Season Record";
+      const categoryIcon = isAlltime ? "🏆" : "🥇";
+      const pills = (record.pills || [])
+        .filter(Boolean)
+        .map(
+          (line) =>
+            `<li class="yw-badge-sheet-stat">${escapeHtml(line)}</li>`
+        )
+        .join("");
+      return `
+        <div class="yw-badge-sheet-overlay" data-yw-sheet-close></div>
+        <div class="yw-badge-sheet-panel yw-record-sheet ${
+          isAlltime ? "yw-record-sheet--alltime" : "yw-record-sheet--season"
+        }" role="dialog" aria-modal="true" aria-label="${escapeHtml(
+          record.title || "Record details"
+        )}" style="--badge-accent-color: ${accent};">
+          <div class="yw-badge-sheet-handle" aria-hidden="true"></div>
+          <div class="yw-badge-sheet-icon" aria-hidden="true">${
+            isAlltime ? "🏆" : record.icon || "🥇"
+          }</div>
+          <h2 class="yw-badge-sheet-title">${escapeHtml(record.title || "")}</h2>
+          ${
+            record.scoreLabel
+              ? `<p class="yw-badge-sheet-score">${escapeHtml(
+                  record.scoreLabel
+                )}</p>`
+              : ""
+          }
+          <p class="yw-badge-sheet-sub"><span class="yw-badge-sheet-cat-icon" aria-hidden="true">${categoryIcon}</span><span class="yw-badge-sheet-cat-name">${escapeHtml(
+            category
+          )}</span></p>
+          ${pills ? `<ul class="yw-badge-sheet-stats">${pills}</ul>` : ""}
+          <button type="button" class="yw-badge-sheet-close" data-yw-sheet-close>CLOSE DETAILS</button>
+        </div>`;
+    }
+
+    function renderBadgeHistorySheet(record) {
+      if (!record) return "";
+      const categoryId = record.categoryId || getBadgeCategoryId(record.key);
+      const accent = getYourWeekSheetAccent(record.key || { category: categoryId });
+      const category = yourWeekBeltMicroLabel(categoryId, null);
+      const categoryIcon = getYourWeekSheetCategoryIcon(categoryId, null);
+      const pills = (record.pills || [])
+        .filter(Boolean)
+        .map(
+          (line) =>
+            `<li class="yw-badge-sheet-stat">${escapeHtml(line)}</li>`
+        )
+        .join("");
+      return `
+        <div class="yw-badge-sheet-overlay" data-yw-sheet-close></div>
+        <div class="yw-badge-sheet-panel" role="dialog" aria-modal="true" aria-label="${escapeHtml(
+          record.name || "Badge details"
+        )}" data-category-theme="${escapeHtml(
+          categoryId || ""
+        )}" style="--badge-accent-color: ${escapeHtml(accent)};">
+          <div class="yw-badge-sheet-handle" aria-hidden="true"></div>
+          <div class="yw-badge-sheet-icon" aria-hidden="true">${
+            record.icon || "🏅"
+          }</div>
+          <h2 class="yw-badge-sheet-title">${escapeHtml(record.name || "")}</h2>
+          ${
+            category
+              ? `<p class="yw-badge-sheet-sub"><span class="yw-badge-sheet-cat-icon" aria-hidden="true">${categoryIcon}</span><span class="yw-badge-sheet-cat-name">${escapeHtml(
+                  category
+                )}</span></p>`
+              : ""
+          }
+          ${pills ? `<ul class="yw-badge-sheet-stats">${pills}</ul>` : ""}
+          <button type="button" class="yw-badge-sheet-close" data-yw-sheet-close>CLOSE DETAILS</button>
+        </div>`;
+    }
+
+    let ywSheetCloseTimer = null;
+
+    function closeYourWeekBadgeSheet() {
+      const sheet = $("yw-badge-sheet");
+      if (!sheet || sheet.hidden) {
+        document.body.classList.remove("yw-sheet-open");
+        return;
+      }
+      if (sheet.classList.contains("is-closing")) return;
+      sheet.classList.remove("is-open");
+      sheet.classList.add("is-closing");
+      if (ywSheetCloseTimer) window.clearTimeout(ywSheetCloseTimer);
+      ywSheetCloseTimer = window.setTimeout(() => {
+        ywSheetCloseTimer = null;
+        sheet.hidden = true;
+        sheet.innerHTML = "";
+        sheet.classList.remove("is-closing");
+        document.body.classList.remove("yw-sheet-open");
+      }, 250);
+    }
+
+    function openYourWeekBadgeSheet(itemId) {
+      if (!window.matchMedia("(max-width: 768px)").matches) return;
+      const record = state.yourWeekRecordSheetMap?.[itemId];
+      const history = record ? null : state.badgeHistorySheetMap?.[itemId];
+      const badge =
+        record || history ? null : state.yourWeekBadgeSheetMap?.[itemId];
+      if (!record && !history && !badge) return;
+      let sheet = $("yw-badge-sheet");
+      if (!sheet) {
+        sheet = document.createElement("div");
+        sheet.id = "yw-badge-sheet";
+        sheet.className = "yw-badge-sheet";
+        document.body.appendChild(sheet);
+      }
+      if (ywSheetCloseTimer) {
+        window.clearTimeout(ywSheetCloseTimer);
+        ywSheetCloseTimer = null;
+      }
+      sheet.classList.remove("is-open", "is-closing");
+      sheet.innerHTML = record
+        ? renderYourWeekRecordSheet(record)
+        : history
+          ? renderBadgeHistorySheet(history)
+          : renderYourWeekBadgeSheet(badge);
+      sheet.hidden = false;
+      document.body.classList.add("yw-sheet-open");
+      sheet.querySelectorAll("[data-yw-sheet-close]").forEach((el) => {
+        el.addEventListener("click", () => closeYourWeekBadgeSheet());
+      });
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          sheet.classList.add("is-open");
+        });
+      });
+    }
+
+    function bindYourWeekBadgeSheet(panel) {
+      panel
+        .querySelectorAll("[data-yw-open-badge], [data-yw-open-record]")
+        .forEach((tile) => {
+          const open = () =>
+            openYourWeekBadgeSheet(
+              tile.dataset.ywOpenRecord || tile.dataset.ywOpenBadge
+            );
+          tile.addEventListener("click", (event) => {
+            event.preventDefault();
+            open();
+          });
+          tile.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              open();
+            }
+          });
+        });
+    }
+
     function renderYourWeekAccomplishmentsSection(
       badges,
       watch,
@@ -16208,11 +17201,13 @@
     ) {
       const sd = state.seasonData?.[String(seasonYear)];
       if (isEliminatedFromChampionship(sd, week, rosterId)) {
+        closeYourWeekBadgeSheet();
         return `
         <section class="your-week-section">
           <p class="yw-empty">Eliminated from Playoffs - No Badges Will Generate</p>
         </section>`;
       }
+      startYourWeekMobileBadgeTiles();
       const visible = (badges || []).filter((b) => !b.hidden);
       const regular = sortYourWeekAccomplishments(
         visible.filter((b) => !isScoringTitleBadge(b))
@@ -16261,7 +17256,8 @@
                 m,
                 watch,
                 week,
-                seasonYear
+                seasonYear,
+                rosterId
               ),
             })),
             ...(byBucket.achievements || []).flatMap((badge, i) => {
@@ -16293,7 +17289,8 @@
                   badge,
                   bucket.id,
                   week,
-                  seasonYear
+                  seasonYear,
+                  rosterId
                 ),
               };
             }),
@@ -16309,7 +17306,8 @@
                     badge,
                     bucket.id,
                     week,
-                    seasonYear
+                    seasonYear,
+                    rosterId
                   )
             );
           }
@@ -16317,14 +17315,24 @@
       }
 
       if (!sectionsCards.length) {
+        closeYourWeekBadgeSheet();
         return `
         <section class="your-week-section">
           <p class="yw-empty">No Badges Earned</p>
         </section>`;
       }
+      const plaqueCards = [];
+      const badgeCards = [];
+      for (const html of sectionsCards) {
+        if (String(html).includes("yw-record-plaque")) plaqueCards.push(html);
+        else badgeCards.push(html);
+      }
+      const plaqueReel = plaqueCards.length
+        ? `<div class="yw-plaque-reel">${plaqueCards.join("")}</div>`
+        : "";
       return `
         <section class="your-week-section yw-week-bucket yw-badge-gallery">
-          <div class="yw-acc-grid">${sectionsCards.join("")}</div>
+          <div class="yw-acc-grid">${plaqueReel}${badgeCards.join("")}</div>
         </section>`;
     }
 
@@ -17236,26 +18244,8 @@
           });
         });
       });
-      panel.querySelectorAll("[data-yw-view-all]").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const bucketId = String(btn.dataset.ywViewAll || "");
-          const bucket = YOUR_WEEK_BUCKETS.find((b) => b.id === bucketId);
-          if (bucket?.viewAll === "achievements") {
-            state.selectedTab = "achievements";
-          } else {
-            state.selectedTab = "hallFame";
-            state.wallOfFameTab = "fame";
-            state.badgeBeltsSeason = String(
-              state.yourWeekSeason ||
-                state.selectedSeason ||
-                state.league?.season ||
-                ""
-            );
-            state.expandedBadgeBeltId = btn.dataset.ywBeltId || null;
-          }
-          renderDashboard();
-        });
-      });
+      bindBeltChipTips(panel);
+      bindYourWeekBadgeSheet(panel);
     }
 
     function getYourWeekManagerList(sd) {
@@ -17364,6 +18354,7 @@
       // Always show every earned badge for the week (no "See all" expand step).
       const badgesToShow = (all || []).filter((b) => !b.hidden);
       const beltOwnerId = getYourWeekBeltOwnerId(sd, rosterId);
+      closeYourWeekBadgeSheet();
 
       panel.innerHTML = `
         <section class="your-week-section your-week-section--hero">
@@ -17391,6 +18382,24 @@
     }
 
 
+    function isMobileDashNav() {
+      return window.matchMedia("(max-width: 600px)").matches;
+    }
+
+    function bindDashNavTab(btn) {
+      btn.addEventListener("click", () => {
+        const tab = btn.dataset.tab;
+        if (!tab) return;
+        state.dashNavMoreOpen = false;
+        state.selectedTab = tab;
+        if (state.selectedTab === "hallFame") {
+          if (state.wallOfFameTab === "pain") state.wallOfFameTab = "fame";
+        }
+        if (state.selectedTab === "hallPain") state.wallOfFameTab = "pain";
+        renderDashboard();
+      });
+    }
+
     /** Single shared page nav for Your Week, both halls, Badge History, and Collections. */
     function renderDashNav() {
       const nav = $("dash-nav");
@@ -17402,26 +18411,70 @@
         { id: "achievements", label: "Badge History" },
         { id: "collections", label: "League Collections" },
       ];
-      nav.innerHTML = tabs
-        .map(
-          (t) =>
-            `<button type="button" class="dash-nav-tab${state.selectedTab === t.id ? " active" : ""}" data-tab="${t.id}" role="tab" aria-selected="${state.selectedTab === t.id ? "true" : "false"}">${t.label}</button>`
-        )
-        .join("");
-      nav.querySelectorAll("[data-tab]").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          state.selectedTab = btn.dataset.tab;
-          if (state.selectedTab === "hallFame") {
-            if (state.wallOfFameTab === "pain") state.wallOfFameTab = "fame";
-          }
-          if (state.selectedTab === "hallPain") state.wallOfFameTab = "pain";
-          renderDashboard();
+      const overflowIds = ["achievements", "collections"];
+      const selected = state.selectedTab;
+      const primaryIds = overflowIds.includes(selected)
+        ? ["yourWeek", "hallFame", selected]
+        : ["yourWeek", "hallFame", "hallPain"];
+      const moreTabs = tabs.filter((t) => !primaryIds.includes(t.id));
+      const moreOpen = !!state.dashNavMoreOpen;
+      const moreHasActive = moreTabs.some((t) => t.id === selected);
+
+      nav.innerHTML =
+        tabs
+          .map((t) => {
+            const extra = primaryIds.includes(t.id) ? "" : " dash-nav-tab--more-only";
+            return `<button type="button" class="dash-nav-tab${
+              selected === t.id ? " active" : ""
+            }${extra}" data-tab="${t.id}" role="tab" aria-selected="${
+              selected === t.id ? "true" : "false"
+            }">${t.label}</button>`;
+          })
+          .join("") +
+        `<div class="dash-nav-more${moreOpen ? " is-open" : ""}${
+          moreHasActive ? " has-active" : ""
+        }">
+          <button type="button" class="dash-nav-more-btn" aria-expanded="${moreOpen}" aria-haspopup="true" aria-controls="dash-nav-more-menu">More</button>
+          <div class="dash-nav-more-menu" id="dash-nav-more-menu" role="menu"${
+            moreOpen ? "" : " hidden"
+          }>
+            ${moreTabs
+              .map(
+                (t) =>
+                  `<button type="button" class="dash-nav-more-item${
+                    selected === t.id ? " active" : ""
+                  }" data-tab="${t.id}" role="menuitem">${t.label}</button>`
+              )
+              .join("")}
+          </div>
+        </div>`;
+
+      nav.querySelectorAll(".dash-nav-tab[data-tab]").forEach(bindDashNavTab);
+      nav.querySelectorAll(".dash-nav-more-item[data-tab]").forEach(bindDashNavTab);
+      nav.querySelector(".dash-nav-more-btn")?.addEventListener("click", (event) => {
+        event.stopPropagation();
+        state.dashNavMoreOpen = !state.dashNavMoreOpen;
+        const wrap = nav.querySelector(".dash-nav-more");
+        const menu = nav.querySelector(".dash-nav-more-menu");
+        const btn = event.currentTarget;
+        wrap?.classList.toggle("is-open", state.dashNavMoreOpen);
+        btn.setAttribute("aria-expanded", String(state.dashNavMoreOpen));
+        if (menu) menu.hidden = !state.dashNavMoreOpen;
+      });
+
+      if (!window.__dashNavMoreBound) {
+        window.__dashNavMoreBound = true;
+        document.addEventListener("click", (event) => {
+          if (!state.dashNavMoreOpen) return;
+          const wrap = document.querySelector(".dash-nav-more");
+          if (wrap && wrap.contains(event.target)) return;
+          state.dashNavMoreOpen = false;
+          wrap?.classList.remove("is-open");
+          wrap?.querySelector(".dash-nav-more-btn")?.setAttribute("aria-expanded", "false");
+          const menu = wrap?.querySelector(".dash-nav-more-menu");
+          if (menu) menu.hidden = true;
         });
-      });
-      nav.querySelector(".dash-nav-tab.active")?.scrollIntoView({
-        inline: "nearest",
-        block: "nearest",
-      });
+      }
     }
 
     // ─── End All-Time Records ──────────────────────────────────────────────────
@@ -17887,6 +18940,12 @@
       hide(wallPanel);
       hide(collectionsPanel);
       hide(achievementsPanel);
+      if (
+        state.selectedTab !== "yourWeek" &&
+        state.selectedTab !== "achievements"
+      ) {
+        closeYourWeekBadgeSheet();
+      }
 
       if (weekBarEl) weekBarEl.hidden = false;
       // Hide the large season record / points-rank hero on Wall,
