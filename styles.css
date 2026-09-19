@@ -1238,6 +1238,10 @@ button.secondary:hover:not(:disabled) { background: var(--border); }
   -webkit-box-orient: initial;
 }
 
+#your-week-panel .yw-badge-gallery .yw-card-blurb {
+  display: none;
+}
+
 #your-week-panel .yw-badge-gallery .yw-card-belt-mark,
 #your-week-panel .yw-badge-gallery .lucky-break-card .yw-card-belt-mark {
   position: absolute;
@@ -9946,7 +9950,7 @@ button.belt-card:hover:not(:disabled),
     scroll-snap-align: unset;
     height: auto;
     min-height: 0;
-    aspect-ratio: 1 / 1.1;
+    aspect-ratio: 1 / 1.22;
     padding: 0.45rem 0.28rem 0.35rem;
     box-sizing: border-box;
     gap: 0.08rem;
@@ -9968,7 +9972,8 @@ button.belt-card:hover:not(:disabled),
       radial-gradient(circle at calc(100% - 4px) calc(100% - 4px), #2c333e 0.9px, #c5ccd6 1.4px, transparent 1.9px);
   }
   #your-week-panel .yw-badge-gallery .yw-mobile-badge-tile,
-  #your-week-panel .yw-badge-gallery .lucky-break-card.yw-mobile-badge-tile {
+  #your-week-panel .yw-badge-gallery .lucky-break-card.yw-mobile-badge-tile,
+  #your-week-panel .yw-badge-gallery .yw-mobile-badge-tile.card-infamy {
     flex: none;
     width: auto;
     min-width: 0;
@@ -9978,12 +9983,12 @@ button.belt-card:hover:not(:disabled),
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    gap: 0.35rem;
+    justify-content: flex-start;
+    gap: 0.18rem;
     min-height: 0;
     height: auto;
-    aspect-ratio: 1 / 1.1;
-    padding: 0.55rem 0.35rem 0.45rem;
+    aspect-ratio: 1 / 1.22;
+    padding: 0.4rem 0.28rem 1.15rem;
     text-align: center;
     cursor: pointer;
     box-sizing: border-box;
@@ -9992,13 +9997,64 @@ button.belt-card:hover:not(:disabled),
   #your-week-panel .yw-badge-gallery .yw-mobile-badge-tile .lucky-break-mark {
     width: 42px;
     height: 42px;
-    margin: 0;
+    margin: 0 0 0.1rem;
+    box-sizing: border-box;
   }
-  #your-week-panel .yw-badge-gallery .yw-mobile-badge-tile .yw-card-icon,
+  #your-week-panel .yw-badge-gallery .yw-mobile-badge-tile .yw-card-icon {
+    width: 22px;
+    height: 22px;
+    font-size: 1.15rem;
+    line-height: 1;
+    display: grid;
+    place-items: center;
+    filter: none;
+    transform: translateY(-0.04em);
+  }
   #your-week-panel .yw-badge-gallery .yw-mobile-badge-tile .lucky-break-mark {
-    width: 38px;
-    height: 38px;
-    font-size: 1.55rem;
+    font-size: 1.15rem;
+    line-height: 1;
+    display: grid;
+    place-items: center;
+    filter: none;
+    transform: translateY(-0.04em);
+  }
+  #your-week-panel .yw-badge-gallery .yw-mobile-badge-tile.card-achievement .yw-card-crest {
+    border: 2px solid #fde68a;
+    box-shadow:
+      0 0 0 3px #92400e inset,
+      0 8px 18px rgba(250, 204, 21, 0.32);
+    filter: none;
+  }
+  #your-week-panel .yw-badge-gallery .yw-mobile-badge-tile.card-achievement .yw-card-icon {
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    filter: none;
+  }
+  #your-week-panel .yw-badge-gallery .yw-mobile-badge-tile.card-nugget .yw-card-crest,
+  #your-week-panel .yw-badge-gallery .yw-mobile-badge-tile.card-nugget .yw-card-crest[data-category-theme] {
+    border: 2px solid #7dd3fc;
+    box-shadow:
+      0 0 0 3px #0369a1 inset,
+      0 0 12px rgba(56, 189, 248, 0.18);
+    filter: none;
+  }
+  #your-week-panel .yw-badge-gallery .yw-mobile-badge-tile.card-nugget .yw-card-icon {
+    filter: none;
+  }
+  #your-week-panel .yw-badge-gallery .yw-mobile-badge-tile .lucky-break-mark {
+    border: 2px solid #86efac;
+    box-shadow:
+      0 0 0 3px #166534 inset,
+      0 0 16px rgba(34, 197, 94, 0.12);
+    filter: none;
+  }
+  #your-week-panel .yw-badge-gallery .yw-mobile-badge-tile.card-infamy .yw-card-crest {
+    border: 2px solid rgba(248, 113, 113, 0.85);
+    box-shadow:
+      0 0 0 3px #7f1d1d inset,
+      0 0 16px rgba(185, 28, 28, 0.35),
+      inset 0 0 10px rgba(0, 0, 0, 0.45);
   }
   #your-week-panel .yw-badge-gallery .yw-mobile-badge-tile .yw-card-name,
   #your-week-panel .yw-badge-gallery .yw-mobile-badge-tile .lucky-break-name {
@@ -10011,12 +10067,15 @@ button.belt-card:hover:not(:disabled),
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
+    margin: 0;
+    padding: 0 0.1rem;
   }
   #your-week-panel .yw-badge-gallery .yw-mobile-badge-tile .card-infamy-inner {
-    gap: 0.35rem;
+    gap: 0.18rem;
     padding: 0;
-    justify-content: center;
+    justify-content: flex-start;
     min-height: 0;
+    position: static;
   }
   #your-week-panel .yw-badge-gallery .yw-mobile-badge-tile .yw-card-desc,
   #your-week-panel .yw-badge-gallery .yw-mobile-badge-tile .lucky-break-desc,
@@ -10024,11 +10083,27 @@ button.belt-card:hover:not(:disabled),
   #your-week-panel .yw-badge-gallery .yw-mobile-badge-tile .yw-alltime-banner {
     display: none;
   }
+  #your-week-panel .yw-badge-gallery .yw-mobile-badge-tile .yw-card-blurb {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    font-size: 0.48rem;
+    font-weight: 600;
+    line-height: 1.2;
+    padding: 0 0.1rem;
+    margin: 0;
+    color: #fff;
+    text-align: center;
+    width: 100%;
+    box-sizing: border-box;
+  }
   #your-week-panel .yw-badge-gallery .yw-mobile-badge-tile .yw-card-belt-mark,
   #your-week-panel .yw-badge-gallery .lucky-break-card.yw-mobile-badge-tile .yw-card-belt-mark {
     display: block;
-    right: 11px;
-    bottom: 11px;
+    right: 8px;
+    bottom: 8px;
+    z-index: 3;
     font-size: 13px;
     opacity: 0.7;
   }

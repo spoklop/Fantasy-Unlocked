@@ -16311,6 +16311,7 @@
       extraClass = "",
       descClass = "",
       narrativeHtml = "",
+      tileBlurb = "",
       dataAttr = "",
     }) {
       const typeClass =
@@ -16352,6 +16353,11 @@
                     ? formatYourWeekAlltimeNarrativeHtml(narrative)
                     : escapeHtml(narrative)
                 }</p>`
+              : ""
+          }
+          ${
+            tileBlurb
+              ? `<p class="yw-card-blurb">${escapeHtml(tileBlurb)}</p>`
               : ""
           }
           ${beltMarkHtml}`;
@@ -16417,12 +16423,14 @@
       }
       const isHero = isScoringTitleBadge(badge) || badge._fromScoringTitle;
       const tile = markYourWeekMobileBadgeTile(badge);
+      const tileKey = resolveBadgeKeyFromBadgeOrId(badge);
       return renderYourWeekAwardCard({
         bucketId: resolvedBucket,
         name: badge.name,
         icon: badge.icon || "🏅",
         narrative: "",
         narrativeHtml: yourWeekBadgeNarrativeHtml(badge, { isAlltime }),
+        tileBlurb: getBadgeCardBlurb(tileKey, badge.description),
         beltLabel: yourWeekBeltMicroLabel(categoryId, badge),
         beltThemeId: categoryId,
         isHero,
@@ -16706,6 +16714,8 @@
       const categoryId = getBadgeCategoryId(badge) || "golden_child";
       const beltMarkHtml = yourWeekBeltCornerMark("lucks", categoryId);
       const tile = markYourWeekMobileBadgeTile(badge);
+      const tileKey = resolveBadgeKeyFromBadgeOrId(badge);
+      const tileBlurb = getBadgeCardBlurb(tileKey, badge.description);
       return `
         <article class="lucky-break-card${tile.extraClass}"${tile.dataAttr}>
           <span class="lucky-break-mark" aria-hidden="true">${
@@ -16717,6 +16727,11 @@
           ${
             narrativeHtml
               ? `<p class="lucky-break-desc yw-card-desc">${narrativeHtml}</p>`
+              : ""
+          }
+          ${
+            tileBlurb
+              ? `<p class="yw-card-blurb">${escapeHtml(tileBlurb)}</p>`
               : ""
           }
           ${beltMarkHtml}
