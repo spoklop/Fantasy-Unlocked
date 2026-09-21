@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Fantasy Unlocked</title>
-  <link rel="stylesheet" href="styles.css?v=20260918-ywtiles1">
+  <link rel="stylesheet" href="styles.css?v=20260920-mobileshell2">
 </head>
 <body>
   <div id="app" class="container">
@@ -76,6 +76,7 @@
 
     <!-- Dashboard -->
     <section id="dashboard" class="hidden">
+      <header class="dash-mobile-header" id="dash-mobile-header" hidden></header>
       <div class="dash-toolbar" id="dash-toolbar">
         <button type="button" class="back-btn" id="back-btn">← Change user</button>
         <div class="dash-nav" id="dash-nav" role="tablist" aria-label="Dashboard pages"></div>
@@ -84,6 +85,7 @@
           <div id="dash-user-select" class="dash-user-select hidden"></div>
         </div>
       </div>
+      <nav class="dash-bottom-nav" id="dash-bottom-nav" hidden aria-label="Dashboard pages"></nav>
       <div id="matchup-banner" class="matchup-hero hidden" aria-live="polite"></div>
       <div id="dash-loading-records" class="dash-loading-records hidden">
         <div class="spinner"></div>
@@ -101,6 +103,6 @@
   <!-- Local schedule dump: script-src works on file:// where fetch(schedules.json) often fails. -->
   <script src="schedules-data.js?v=20260915-hint"></script>
   <script src="badgesConfig.js?v=20260916-chiptips"></script>
-  <script src="app.js?v=20260918-ywtiles1"></script>
+  <script src="app.js?v=20260920-mobileshell2"></script>
 </body>
 </html>

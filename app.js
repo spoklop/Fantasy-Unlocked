@@ -175,6 +175,8 @@
       collectionsComputing: false,
       collectionsCollapsed: {},
       dashNavMoreOpen: false,
+      yourWeekSelectedBeltId: null,
+      yourWeekFilterSheetOpen: false,
       archivesTab: "collections",
       archivesSeason: null,
       winigamiExpandedScore: null,
@@ -17720,7 +17722,9 @@
                 ${
                   TITLE_RACE_SUBTITLES[belt.id]
                     ? `<span class="yw-belt-track-hint">${escapeHtml(
-                        `${TITLE_RACE_SUBTITLES[belt.id]}. Click title for full leaderboard.`
+                        isMobileDashNav()
+                          ? `${TITLE_RACE_SUBTITLES[belt.id]}. Tap the race for the full leaderboard.`
+                          : `${TITLE_RACE_SUBTITLES[belt.id]}. Click title for full leaderboard.`
                       )}</span>`
                     : ""
                 }
@@ -17768,6 +17772,74 @@
         </button>`;
     }
 
+    function titleRaceFallbackIcon(beltId) {
+      return (
+        {
+          apex_predator: "👑",
+          tactician: "🧠",
+          tank_commander: "🤡",
+          tragic_hero: "☠️",
+          golden_child: "🍀",
+          league_historian: "💡",
+        }[beltId] || "🥊"
+      );
+    }
+
+    function formatTitleRaceLeader(belt, ownerId) {
+      const holders = belt?.holders || [];
+      const topTotal = Number(belt?.topTotal) || 0;
+      if (!holders.length || topTotal <= 0) {
+        return { name: "Unclaimed", count: 0 };
+      }
+      const names = holders.map((h) => {
+        if (ownerId != null && String(h.ownerId) === String(ownerId)) {
+          return "You";
+        }
+        return String(h.name || "Unknown").trim() || "Unknown";
+      });
+      return { name: names.join(" · "), count: topTotal };
+    }
+
+    function renderYourWeekTitleRaceSummary(belts, ownerId) {
+      const byId = new Map((belts || []).map((b) => [b.id, b]));
+      const ids = [
+        ...YOUR_WEEK_BELT_TRACKER_FAME,
+        ...YOUR_WEEK_BELT_TRACKER_PAIN,
+      ];
+      const rows = ids
+        .map((id) => byId.get(id))
+        .filter(Boolean)
+        .map((belt) => {
+          const leader = formatTitleRaceLeader(belt, ownerId);
+          const icon = belt.icon || titleRaceFallbackIcon(belt.id);
+          const countLabel = leader.count === 1 ? "badge" : "badges";
+          return `
+            <button type="button" class="yw-title-race-row" data-yw-belt-select="${escapeHtml(
+              belt.id
+            )}" data-category-theme="${escapeHtml(belt.id)}">
+              <span class="yw-title-race-icon" aria-hidden="true">${icon}</span>
+              <span class="yw-title-race-copy">
+                <span class="yw-title-race-name">${escapeHtml(belt.name)}</span>
+                <span class="yw-title-race-leader">${escapeHtml(leader.name)}</span>
+              </span>
+              <span class="yw-title-race-meta">
+                <span class="yw-title-race-count">${escapeHtml(
+                  String(leader.count)
+                )}</span>
+                <span class="yw-title-race-count-label">${countLabel}</span>
+              </span>
+            </button>`;
+        })
+        .join("");
+      return `
+        <section class="your-week-section yw-moves-section yw-title-race-summary">
+          <h3 class="your-week-section-title">Title Race</h3>
+          <div class="yw-title-race-card">
+            ${rows || `<p class="yw-empty">No belt standings yet.</p>`}
+          </div>
+        </section>`;
+    }
+
     function renderYourWeekBigMoves(belts, beltsReady, ownerId, prevBelts, week) {
       if (!beltsReady) {
         return `
@@ -17775,6 +17847,43 @@
           <h3 class="your-week-section-title">Title Race</h3>
           <p class="yw-moves-sub">Earn the most total badges in a category to claim its title. Every title tells a story - not all are honorable.</p>
           <p class="yw-empty">Belt standings are still loading…</p>
+        </section>`;
+      }
+      if (isMobileDashNav()) {
+        const selectedId = state.yourWeekSelectedBeltId;
+        if (!selectedId) {
+          return renderYourWeekTitleRaceSummary(belts, ownerId);
+        }
+        const byId = new Map((belts || []).map((b) => [b.id, b]));
+        const prevById = new Map((prevBelts || []).map((b) => [b.id, b]));
+        const belt = byId.get(selectedId);
+        if (!belt) {
+          state.yourWeekSelectedBeltId = null;
+          state.yourWeekExpandedBeltId = null;
+          return renderYourWeekTitleRaceSummary(belts, ownerId);
+        }
+        const isExpanded = state.yourWeekExpandedBeltId === belt.id;
+        return `
+        <section class="your-week-section yw-moves-section yw-title-race-detail">
+          <button type="button" class="yw-title-race-back" data-yw-belt-back>
+            Title Race
+          </button>
+          <div class="yw-belt-tracker">
+            <div class="yw-belt-track-block">
+              ${renderYourWeekBeltTrackerRow(
+                belt,
+                ownerId,
+                prevById.get(belt.id) || null,
+                week,
+                isExpanded
+              )}
+              ${
+                isExpanded
+                  ? `<div class="yw-belt-expand">${renderBeltDrawer(belt)}</div>`
+                  : ""
+              }
+            </div>
+          </div>
         </section>`;
       }
       const byId = new Map((belts || []).map((b) => [b.id, b]));
@@ -18208,6 +18317,8 @@
       year = String(year);
       state.yourWeekSeason = year;
       state.yourWeekBadgesOpen = false;
+      state.yourWeekSelectedBeltId = null;
+      state.yourWeekExpandedBeltId = null;
       state.yourWeekManagerList = null;
       state.yourWeekManagerListYear = null;
       state.yourWeekViewRosterId = null;
@@ -18224,6 +18335,7 @@
       state.yourWeekViewRosterId = Number(rosterId);
       state.yourWeekBadgesOpen = false;
       renderYourWeekTab();
+      renderDashMobileChrome();
     }
 
     function getYourWeekSeasonOptions() {
@@ -18239,6 +18351,21 @@
       });
       panel.querySelectorAll("[data-your-manager]").forEach((btn) => {
         btn.addEventListener("click", () => applyYourWeekManager(btn.dataset.yourManager));
+      });
+      panel.querySelectorAll("[data-yw-belt-select]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const id = btn.dataset.ywBeltSelect || null;
+          state.yourWeekSelectedBeltId = id;
+          state.yourWeekExpandedBeltId = null;
+          renderYourWeekTab();
+        });
+      });
+      panel.querySelectorAll("[data-yw-belt-back]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          state.yourWeekSelectedBeltId = null;
+          state.yourWeekExpandedBeltId = null;
+          renderYourWeekTab();
+        });
       });
       panel.querySelectorAll("[data-yw-belt-open]").forEach((btn) => {
         btn.addEventListener("click", () => {
@@ -18388,6 +18515,7 @@
 
       bindYourWeekButtons(panel);
       show(panel);
+      renderDashMobileChrome();
       if (state.yourWeekExpandedBeltId) {
         const drawer = panel.querySelector(
           `[data-belt-drawer="${CSS.escape(state.yourWeekExpandedBeltId)}"]`
@@ -18399,6 +18527,242 @@
 
     function isMobileDashNav() {
       return window.matchMedia("(max-width: 600px)").matches;
+    }
+
+    const DASH_PAGE_TABS = [
+      { id: "yourWeek", label: "Your Week", navHtml: "Your<br>Week", icon: "🏆" },
+      { id: "hallFame", label: "Hall of Fame", navHtml: "Hall of<br>Fame", icon: "👑" },
+      { id: "hallPain", label: "Hall of Pain", navHtml: "Hall of<br>Pain", icon: "☠️" },
+      { id: "achievements", label: "Badge History", navHtml: "Badge<br>History", icon: "🛡️" },
+      { id: "collections", label: "League Collections", navHtml: "League<br>Collections", icon: "📦" },
+    ];
+
+    function dashPageTitle(tab) {
+      return DASH_PAGE_TABS.find((t) => t.id === tab)?.label || "Your Week";
+    }
+
+    function bindMobileDashChrome() {
+      if (window.__mobileDashChromeBound) return;
+      window.__mobileDashChromeBound = true;
+      const mq = window.matchMedia("(max-width: 600px)");
+      const onChange = () => {
+        if ($("dashboard") && !$("dashboard").classList.contains("hidden")) {
+          renderDashboard();
+        }
+      };
+      if (typeof mq.addEventListener === "function") {
+        mq.addEventListener("change", onChange);
+      } else if (typeof mq.addListener === "function") {
+        mq.addListener(onChange);
+      }
+    }
+
+    function renderYourWeekFilterFields(root) {
+      if (!root) return;
+      const yourSeason = String(
+        state.yourWeekSeason || state.selectedSeason || state.league?.season || ""
+      );
+      const seasons = getYourWeekSeasonOptions();
+      const completed = (
+        state.seasonData[yourSeason]?.completedWeeks ||
+        state.completedWeeks ||
+        []
+      )
+        .map(Number)
+        .filter((w) => Number.isFinite(w))
+        .sort((a, b) => a - b);
+      const activeWeek = Number(state.yourWeekWeek);
+      const sd = state.seasonData[yourSeason];
+      const managers = sd ? getYourWeekManagerList(sd) : [];
+      const rosterId = sd ? resolveYourWeekRosterId(sd) : null;
+
+      const seasonHtml =
+        seasons.length > 1
+          ? dashSelectHtml(
+              "your-week-season-select",
+              "Season",
+              seasons
+                .map((y) => {
+                  const sel = String(y) === String(yourSeason) ? " selected" : "";
+                  return `<option value="${escapeHtml(String(y))}"${sel}>${escapeHtml(
+                    String(y)
+                  )}</option>`;
+                })
+                .join("")
+            )
+          : `<strong>${escapeHtml(yourSeason || "—")}</strong>`;
+      const weekHtml = dashSelectHtml(
+        "your-week-week-select",
+        Number.isFinite(activeWeek) ? `Week ${activeWeek}` : "Week",
+        completed
+          .map((w) => {
+            const sel = Number(activeWeek) === Number(w) ? " selected" : "";
+            return `<option value="${w}"${sel}>Week ${w}</option>`;
+          })
+          .join("")
+      );
+      const managerHtml =
+        managers.length > 1
+          ? dashSelectHtml(
+              "your-week-user-select",
+              "Manager",
+              managers
+                .map((m) => {
+                  const you = m.isYou ? " (You)" : "";
+                  const sel =
+                    Number(m.rosterId) === Number(rosterId) ? " selected" : "";
+                  return `<option value="${m.rosterId}"${sel}>${escapeHtml(
+                    m.name
+                  )}${you}</option>`;
+                })
+                .join("")
+            )
+          : "";
+
+      root.innerHTML = `
+        <div class="dash-filter-field">
+          <span>Season</span>
+          ${seasonHtml}
+        </div>
+        <div class="dash-filter-field">
+          <span>Week</span>
+          ${weekHtml}
+        </div>
+        ${
+          managerHtml
+            ? `<div class="dash-filter-field"><span>Manager</span>${managerHtml}</div>`
+            : ""
+        }`;
+
+      root.querySelector("#your-week-season-select")?.addEventListener("change", (event) => {
+        const year = String(event.target.value);
+        if (String(state.yourWeekSeason || "") === year) return;
+        applyYourWeekSeason(year);
+      });
+      root.querySelector("#your-week-week-select")?.addEventListener("change", (event) => {
+        const weekNum = Number(event.target.value);
+        if (Number(state.yourWeekWeek) === weekNum) return;
+        state.selectedWeek = weekNum;
+        state.yourWeekWeek = weekNum;
+        state.yourWeekBadgesOpen = false;
+        state.yourWeekSelectedBeltId = null;
+        state.yourWeekExpandedBeltId = null;
+        renderDashboard();
+      });
+      root.querySelector("#your-week-user-select")?.addEventListener("change", (event) => {
+        const nextId = Number(event.target.value);
+        if (Number(state.yourWeekViewRosterId) === nextId) return;
+        applyYourWeekManager(nextId);
+      });
+    }
+
+    function closeDashFilterSheet() {
+      const sheet = $("dash-filter-sheet");
+      state.yourWeekFilterSheetOpen = false;
+      document.body.classList.remove("dash-filter-open");
+      if (!sheet) return;
+      sheet.hidden = true;
+      sheet.classList.remove("is-open");
+    }
+
+    function openDashFilterSheet() {
+      if (!isMobileDashNav() || state.selectedTab !== "yourWeek") return;
+      let sheet = $("dash-filter-sheet");
+      if (!sheet) {
+        sheet = document.createElement("div");
+        sheet.id = "dash-filter-sheet";
+        sheet.className = "dash-filter-sheet yw-badge-sheet";
+        document.body.appendChild(sheet);
+      }
+      state.yourWeekFilterSheetOpen = true;
+      sheet.hidden = false;
+      sheet.innerHTML = `
+        <div class="yw-badge-sheet-overlay" data-dash-filter-close></div>
+        <div class="yw-badge-sheet-panel dash-filter-panel" role="dialog" aria-modal="true" aria-label="Week, season, and manager">
+          <div class="yw-badge-sheet-handle" aria-hidden="true"></div>
+          <h2 class="yw-badge-sheet-title">Filters</h2>
+          <div class="dash-filter-fields"></div>
+          <button type="button" class="yw-badge-sheet-close" data-dash-filter-close>Done</button>
+        </div>`;
+      renderYourWeekFilterFields(sheet.querySelector(".dash-filter-fields"));
+      sheet.querySelectorAll("[data-dash-filter-close]").forEach((el) => {
+        el.addEventListener("click", () => closeDashFilterSheet());
+      });
+      document.body.classList.add("dash-filter-open");
+      window.requestAnimationFrame(() => {
+        sheet.classList.add("is-open");
+      });
+    }
+
+    function renderDashMobileHeader() {
+      const header = $("dash-mobile-header");
+      if (!header) return;
+      const mobile = isMobileDashNav();
+      header.hidden = !mobile;
+      if (!mobile) return;
+      const tab = state.selectedTab || "yourWeek";
+      const title = dashPageTitle(tab);
+      const week = Number(state.yourWeekWeek);
+      const sub =
+        tab === "yourWeek" && Number.isFinite(week) ? `Week ${week}` : "";
+      const showFilters = tab === "yourWeek";
+      header.innerHTML = `
+        <span class="dash-mobile-overflow-spacer" aria-hidden="true"></span>
+        <div class="dash-mobile-header-copy">
+          <h1 class="dash-mobile-title">${escapeHtml(title)}</h1>
+          ${
+            sub
+              ? `<p class="dash-mobile-sub">${escapeHtml(sub)}</p>`
+              : ""
+          }
+        </div>
+        ${
+          showFilters
+            ? `<button type="button" class="dash-mobile-overflow" aria-label="Week, season, and manager filters">⋮</button>`
+            : `<span class="dash-mobile-overflow-spacer" aria-hidden="true"></span>`
+        }`;
+      header
+        .querySelector(".dash-mobile-overflow")
+        ?.addEventListener("click", () => openDashFilterSheet());
+    }
+
+    function renderDashBottomNav() {
+      const nav = $("dash-bottom-nav");
+      if (!nav) return;
+      const mobile = isMobileDashNav();
+      nav.hidden = !mobile;
+      document.body.classList.toggle("has-dash-bottom-nav", mobile && !$("dashboard")?.classList.contains("hidden"));
+      if (!mobile) return;
+      const selected = state.selectedTab;
+      nav.innerHTML = DASH_PAGE_TABS.map(
+        (t) => `
+        <button type="button" class="dash-bottom-nav-item${
+          selected === t.id ? " active" : ""
+        }" data-tab="${t.id}" ${selected === t.id ? 'aria-current="page"' : ""}>
+          <span class="dash-bottom-nav-icon" aria-hidden="true">${t.icon}</span>
+          <span class="dash-bottom-nav-label">${t.navHtml}</span>
+        </button>`
+      ).join("");
+      nav.querySelectorAll("[data-tab]").forEach(bindDashNavTab);
+    }
+
+    function renderDashMobileChrome() {
+      bindMobileDashChrome();
+      const dash = $("dashboard");
+      dash?.classList.toggle("dash-tab-your-week", state.selectedTab === "yourWeek");
+      dash?.classList.toggle("dash-mobile-shell", isMobileDashNav());
+      renderDashMobileHeader();
+      renderDashBottomNav();
+      if (state.yourWeekFilterSheetOpen && isMobileDashNav() && state.selectedTab === "yourWeek") {
+        const sheet = $("dash-filter-sheet");
+        if (sheet && !sheet.hidden) {
+          renderYourWeekFilterFields(sheet.querySelector(".dash-filter-fields"));
+        } else {
+          openDashFilterSheet();
+        }
+      } else if (state.selectedTab !== "yourWeek" || !isMobileDashNav()) {
+        closeDashFilterSheet();
+      }
     }
 
     function bindDashNavTab(btn) {
@@ -18419,13 +18783,7 @@
     function renderDashNav() {
       const nav = $("dash-nav");
       if (!nav) return;
-      const tabs = [
-        { id: "yourWeek", label: "Your Week" },
-        { id: "hallFame", label: "Hall of Fame" },
-        { id: "hallPain", label: "Hall of Pain" },
-        { id: "achievements", label: "Badge History" },
-        { id: "collections", label: "League Collections" },
-      ];
+      const tabs = DASH_PAGE_TABS;
       const overflowIds = ["achievements", "collections"];
       const selected = state.selectedTab;
       const primaryIds = overflowIds.includes(selected)
@@ -18940,6 +19298,7 @@
 
     function renderDashboardBody() {
       renderDashNav();
+      renderDashMobileChrome();
 
       const yourWeekPanel = $("your-week-panel");
       const analyticsPanel = $("analytics-panel");
@@ -19087,6 +19446,11 @@
     function renderDashUserSelect() {
       const el = $("dash-user-select");
       if (!el) return;
+      if (state.selectedTab === "yourWeek" && isMobileDashNav()) {
+        el.classList.add("hidden");
+        el.innerHTML = "";
+        return;
+      }
       if (state.selectedTab === "achievements") {
         const scope = state.wallBadgesScope === "league" ? "league" : "myTeam";
         el.classList.remove("hidden");
@@ -19148,6 +19512,12 @@
       const bar = $("week-bar");
       if (!bar) return;
       bar.classList.remove("week-bar--selects");
+      if (state.selectedTab === "yourWeek" && isMobileDashNav()) {
+        bar.innerHTML = "";
+        bar.hidden = true;
+        return;
+      }
+      bar.hidden = false;
 
       if (isHallTab()) {
         renderLegacySeasonBar(bar);
@@ -19279,6 +19649,8 @@
           state.selectedWeek = weekNum;
           state.yourWeekWeek = weekNum;
           state.yourWeekBadgesOpen = false;
+          state.yourWeekSelectedBeltId = null;
+          state.yourWeekExpandedBeltId = null;
           renderDashboard();
         });
         return;
