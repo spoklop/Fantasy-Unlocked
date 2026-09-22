@@ -4204,6 +4204,91 @@
       return result;
     }
 
+    function joinSheetNameChoices(names) {
+      const list = (names || []).map((n) => String(n || "").trim()).filter(Boolean);
+      if (!list.length) return "";
+      if (list.length === 1) return list[0];
+      if (list.length === 2) return `${list[0]} or ${list[1]}`;
+      return `${list.slice(0, -1).join(", ")} or ${list[list.length - 1]}`;
+    }
+
+    function formatSelfInflictedWinLine(lineup, actualScore, oppScore) {
+      if (!lineup) return "";
+      const actualScoreNum = Number(actualScore);
+      const opp = Number(oppScore);
+      if (!Number.isFinite(actualScoreNum) || !Number.isFinite(opp)) return "";
+      const need = opp - actualScoreNum;
+      if (!(need >= 0)) return "";
+
+      const actualRows = (lineup.actualStarters || []).filter((s) => s?.playerId);
+      const optimalRows = (lineup.optimalStarters || []).filter((s) => s?.playerId);
+      const actualIds = new Set(actualRows.map((s) => String(s.playerId)));
+      const optimalIds = new Set(optimalRows.map((s) => String(s.playerId)));
+      const incoming = optimalRows.filter((s) => !actualIds.has(String(s.playerId)));
+      const outgoing = actualRows.filter((s) => !optimalIds.has(String(s.playerId)));
+      const swaps = [];
+      const seen = new Set();
+      for (const bench of incoming) {
+        for (const started of outgoing) {
+          const benchKey = String(bench.playerId);
+          const startKey = String(started.playerId);
+          const pair = `${benchKey}|${startKey}`;
+          if (seen.has(pair)) continue;
+          const gain = Number(bench.score) - Number(started.score);
+          if (!Number.isFinite(gain) || gain <= 0.009) continue;
+          seen.add(pair);
+          swaps.push({
+            bench: bench.playerName || "that player",
+            benchId: benchKey,
+            started: started.playerName || "your starter",
+            startedId: startKey,
+            gain,
+          });
+        }
+      }
+      if (!swaps.length) return "";
+
+      const winners = swaps.filter((s) => s.gain > need + 1e-9);
+      if (winners.length) {
+        const byStarted = new Map();
+        for (const s of winners.sort((a, b) => b.gain - a.gain)) {
+          if (!byStarted.has(s.startedId)) byStarted.set(s.startedId, []);
+          byStarted.get(s.startedId).push(s);
+        }
+        const clauses = [...byStarted.values()].map((group) => {
+          const startedName = group[0].started;
+          const benchNames = [];
+          const used = new Set();
+          for (const item of group) {
+            if (used.has(item.benchId)) continue;
+            used.add(item.benchId);
+            benchNames.push(item.bench);
+          }
+          return `${joinSheetNameChoices(benchNames)} over ${startedName}`;
+        });
+        if (clauses.length === 1) {
+          return `Starting ${clauses[0]} would have resulted in a win`;
+        }
+        return `Starting ${joinSheetNameChoices(clauses)} would have resulted in a win`;
+      }
+
+      const usedBench = new Set();
+      const usedStarted = new Set();
+      const chosen = [];
+      let gained = 0;
+      for (const s of [...swaps].sort((a, b) => b.gain - a.gain)) {
+        if (usedBench.has(s.benchId) || usedStarted.has(s.startedId)) continue;
+        chosen.push(s);
+        usedBench.add(s.benchId);
+        usedStarted.add(s.startedId);
+        gained += s.gain;
+        if (gained > need + 1e-9) break;
+      }
+      if (!chosen.length || gained <= need + 1e-9) return "";
+      const clauses = chosen.map((s) => `${s.bench} over ${s.started}`);
+      return `Starting ${clauses.join(" and ")} would have resulted in a win`;
+    }
+
     /** Console debug helper — window.verifyOptimalLineup(rosterId, week) */
     function verifyOptimalLineup(rosterId, week) {
       const matchupsByWeek = state.matchupsByWeek || {};
@@ -7586,7 +7671,7 @@
       return `<img class="${imgClass}" src="${src}" alt="" draggable="false" loading="lazy" />`;
     }
 
-    function renderBeltCard(belt, isExpanded) {
+    function renderBeltCard(belt) {
       const blurbHtml = belt.blurb
         ? `<p class="belt-card-blurb">${escapeHtml(belt.blurb)}</p>`
         : "";
@@ -7638,10 +7723,8 @@
 
       const categoryId = belt.id;
       return `
-        <button type="button" class="belt-card${statusClass}${
-          isExpanded ? " is-expanded" : ""
-        }" data-category-theme="${escapeHtml(categoryId)}" data-belt-expand="${escapeHtml(
-          belt.id
+        <article class="belt-card${statusClass}" data-category-theme="${escapeHtml(
+          categoryId
         )}">
           <div class="belt-card-top">
             <span class="belt-card-icon" aria-hidden="true">${belt.icon}</span>
@@ -7651,7 +7734,7 @@
             </span>
           </div>
           ${centerpiece}
-        </button>`;
+        </article>`;
     }
 
     function renderBeltDrawer(belt) {
@@ -9164,17 +9247,12 @@
       const shown = (beltIds || [])
         .map((id) => belts.find((b) => b.id === id))
         .filter(Boolean);
-      const expandedId = state.expandedBadgeBeltId;
-      const expandedBelt = shown.find((b) => b.id === expandedId);
-      const cards = shown
-        .map((belt) => renderBeltCard(belt, expandedId === belt.id))
-        .join("");
+      const cards = shown.map((belt) => renderBeltCard(belt)).join("");
       return `
         <p class="section-label">Title Holders</p>
         <div class="belts-grid legacy-hall-belts">${
           cards || '<p class="metric-sub">No belt standings yet.</p>'
-        }</div>
-        ${expandedBelt ? renderBeltDrawer(expandedBelt) : ""}`;
+        }</div>`;
     }
 
     const PAIN_STAT_DEFS = [
@@ -9571,14 +9649,6 @@
     }
 
     function bindLegacyHallInteractions(panel) {
-      panel.querySelectorAll("[data-belt-expand]").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const id = btn.dataset.beltExpand;
-          state.expandedBadgeBeltId =
-            state.expandedBadgeBeltId === id ? null : id;
-          renderWallOfFame();
-        });
-      });
       bindBeltChipTips(panel);
     }
 
@@ -13767,6 +13837,14 @@
       }
 
       if (oppHadHighest && h2h.result !== "bye") {
+        const oppName = h2h.oppName || "Opponent";
+        const pts = Number(oppScore);
+        const ptsLabel = Number.isFinite(pts) ? pts.toFixed(1) : "—";
+        const histRank = rankDescending(histTeam, pts);
+        const nth = formatNthHighest(histRank);
+        const buzzsawDetail = nth
+          ? `${oppName} scored ${ptsLabel}, ${nth} in league history`
+          : `${oppName} scored ${ptsLabel}`;
         triggered.push(
           makeBadge({
             id: "buzzsaw",
@@ -13775,9 +13853,7 @@
             tier: "badge",
             category: BADGE_CATEGORIES.matchup,
             priority: 3,
-            dataLines: [
-              "Faced the highest-scoring team in the league",
-            ],
+            dataLines: [buzzsawDetail],
             borderColor: "var(--warn)",
             isShame: false,
           })
@@ -13855,7 +13931,8 @@
             priority: 1,
             dataLines: [
               `Left ${leftOnBench.toFixed(1)} pts on your bench — Optimal lineup would have won your matchup`,
-            ],
+              formatSelfInflictedWinLine(lineup, starterPts, oppScore),
+            ].filter(Boolean),
             borderColor: "var(--danger)",
             isShame: true,
           })
@@ -13909,9 +13986,13 @@
             category: BADGE_CATEGORIES.lineup,
             priority: 3,
             dataLines: [
-              leftOnBench.toFixed(1) === "0.0"
-                ? `Elite lineup efficiency. ${leftOnBench.toFixed(1)} pts left on your bench`
-                : `Elite lineup efficiency. Only ${leftOnBench.toFixed(1)} pts left on your bench`,
+              `${
+                leftOnBench.toFixed(1) === "0.0"
+                  ? `Elite lineup efficiency. ${leftOnBench.toFixed(1)} pts left on your bench`
+                  : `Elite lineup efficiency. Only ${leftOnBench.toFixed(1)} pts left on your bench`
+              } · ${Number(starterPts).toFixed(1)} / ${Number(
+                optimalScore
+              ).toFixed(1)} optimal points`,
             ],
             borderColor: "#8b9cb3",
           })
@@ -13928,7 +14009,9 @@
             category: BADGE_CATEGORIES.lineup,
             priority: 2,
             dataLines: [
-              `${efficiency.toFixed(1)}% lineup efficiency — Started well below the optimal roster`,
+              `${efficiency.toFixed(1)}% lineup efficiency · ${Number(
+                starterPts
+              ).toFixed(1)} / ${Number(optimalScore).toFixed(1)}`,
             ],
             borderColor: "var(--danger)",
             isShame: true,
@@ -13938,10 +14021,6 @@
 
       // ── Scoring ────────────────────────────────────────────────────────────
       if (Number(myRank) === 1 && myScore > 0) {
-        const tiedHigh =
-          (allPlay.teams || []).filter(
-            (t) => Math.abs(Number(t.score) - Number(topScore)) < 0.01
-          ).length > 1;
         triggered.push(
           makeBadge({
             id: "freightTrain",
@@ -13951,9 +14030,14 @@
             category: BADGE_CATEGORIES.scoring,
             priority: 2,
             dataLines: [
-              tiedHigh
-                ? `${myScore.toFixed(1)} team pts — Tied for the highest score in the league this week`
-                : `${myScore.toFixed(1)} team pts — Highest score in the league this week`,
+              [
+                `${myScore.toFixed(1)} team pts`,
+                formatNthHighest(teamRank)
+                  ? `${formatNthHighest(teamRank)} in league history`
+                  : "",
+              ]
+                .filter(Boolean)
+                .join(" · "),
             ],
             borderColor: "#8b9cb3",
           })
@@ -14357,20 +14441,10 @@
           !byePlayerSet.has(p.id)
       );
       if (zeroStarters.length) {
-        const isDefenseZero = (p) =>
-          p.pos === "DEF" || isDefUnit(p.id);
-        const defZeros = zeroStarters.filter(isDefenseZero);
-        const skillZeros = zeroStarters.filter((p) => !isDefenseZero(p));
-        const dataLines = [];
-        if (skillZeros.length) {
-          const nameList = formatPlayerNameList(skillZeros.map((p) => p.name));
-          const verb = skillZeros.length === 1 ? "was" : "were";
-          dataLines.push(`${nameList} ${verb} doing cardio out there`);
-        }
-        if (defZeros.length) {
-          const nameList = formatPlayerNameList(defZeros.map((p) => p.name));
-          dataLines.push(`${nameList} put up 0 in your starting lineup`);
-        }
+        const nameList = formatPlayerNameList(
+          zeroStarters.map((p) => p.name)
+        );
+        const dataLines = [`${nameList} scored 0.0 points.`];
         triggered.push(
           makeBadge({
             id: "donutBoy",
@@ -14391,7 +14465,11 @@
         (p) => Number.isFinite(Number(p.pts)) && Number(p.pts) < 5
       );
       if (whiffStarters.length >= 3) {
-        const nameList = formatPlayerNameList(whiffStarters.map((p) => p.name));
+        const nameList = formatPlayerNameList(
+          whiffStarters.map(
+            (p) => `${p.name} (${Number(p.pts).toFixed(1)})`
+          )
+        );
         triggered.push(
           makeBadge({
             id: "whiff",
@@ -15661,6 +15739,20 @@
           if (roofLineup.isGreatOutdoors) {
             const outdoorCount = roofLineup.outdoorStarters.length;
             const totalStarters = roofLineup.totalStarters;
+            const exceptPlayers = [
+              ...roofLineup.domeStarters,
+              ...roofLineup.openStarters,
+              ...roofLineup.closedStarters,
+              ...roofLineup.unknownStarters,
+            ];
+            const dataLines =
+              outdoorCount >= totalStarters || !exceptPlayers.length
+                ? []
+                : [
+                    `Every starter except for ${formatPlayerNameList(
+                      exceptPlayers.map((p) => p.name)
+                    )} played outdoors this week`,
+                  ];
             triggered.push(
               makeBadge({
                 id: "greatOutdoors",
@@ -15670,9 +15762,7 @@
                 tier: "badge",
                 category: BADGE_CATEGORIES.schedule,
                 priority: 4,
-                dataLines: [
-                  `${outdoorCount} of ${totalStarters} starters played outdoors this week — Embracing the elements`,
-                ],
+                dataLines,
                 borderColor: "#8b9cb3",
                 isShame: false,
               })
@@ -16898,7 +16988,15 @@
         !hasYourWeekSheetPlayerName(s) &&
         !/-?\d+\.\d+/.test(s);
 
-      let m = s.match(/^(.+?)\s+(was|were)\s+doing cardio out there\.?$/i);
+      let m = s.match(/^Every starter except for (.+) played outdoors this week\.?$/i);
+      if (m) {
+        return { flavor: "", instance: s };
+      }
+      m = s.match(/^(.+?)\s+scored 0\.0 points\.?$/i);
+      if (m) {
+        return { flavor: "", instance: s };
+      }
+      m = s.match(/^(.+?)\s+(was|were)\s+doing cardio out there\.?$/i);
       if (m) {
         return {
           flavor: `${m[2]} doing cardio out there`,
@@ -16958,7 +17056,15 @@
         def.description ||
         "";
       const categoryId = getBadgeCategoryId(badge);
-      const lines = yourWeekBadgeNarrativeLines(badge);
+      const extraPills = [];
+      const lines = [];
+      for (const line of yourWeekBadgeNarrativeLines(badge)) {
+        if (/^Starting\s+.+\swould have resulted in a win\.?$/i.test(line)) {
+          extraPills.push(line.replace(/\.+$/, ""));
+        } else {
+          lines.push(line);
+        }
+      }
       const flavorParts = requirement ? [requirement] : [];
       const instanceParts = [];
       for (const line of lines) {
@@ -17008,6 +17114,7 @@
         categoryIcon: getYourWeekSheetCategoryIcon(categoryId, badge),
         description,
         who,
+        extraPills,
       };
     }
 
@@ -17018,14 +17125,32 @@
       const copy = buildYourWeekSheetCopy(badge);
       const categoryId = getBadgeCategoryId(badge);
       const accent = getYourWeekSheetAccent(badge);
-      const pills = [
-        `<li class="yw-badge-sheet-stat yw-badge-sheet-stat--desc">${escapeHtml(
-          copy.description || copy.who || ""
-        )}</li>`,
-        `<li class="yw-badge-sheet-stat yw-badge-sheet-stat--who">${escapeHtml(
-          copy.who || copy.description || ""
-        )}</li>`,
-      ];
+      const desc = String(copy.description || "").trim();
+      const who = String(copy.who || "").trim();
+      const pills = [];
+      if (desc) {
+        pills.push(
+          `<li class="yw-badge-sheet-stat yw-badge-sheet-stat--desc">${escapeHtml(
+            desc
+          )}</li>`
+        );
+      }
+      if (who && who !== desc) {
+        pills.push(
+          `<li class="yw-badge-sheet-stat yw-badge-sheet-stat--who">${escapeHtml(
+            who
+          )}</li>`
+        );
+      }
+      for (const extra of copy.extraPills || []) {
+        const extraText = String(extra || "").trim();
+        if (!extraText || extraText === desc || extraText === who) continue;
+        pills.push(
+          `<li class="yw-badge-sheet-stat yw-badge-sheet-stat--extra">${escapeHtml(
+            extraText
+          )}</li>`
+        );
+      }
       return `
         <div class="yw-badge-sheet-overlay" data-yw-sheet-close></div>
         <div class="yw-badge-sheet-panel" role="dialog" aria-modal="true" aria-label="${escapeHtml(
@@ -18616,12 +18741,12 @@
 
       root.innerHTML = `
         <div class="dash-filter-field">
-          <span>Season</span>
-          ${seasonHtml}
-        </div>
-        <div class="dash-filter-field">
           <span>Week</span>
           ${weekHtml}
+        </div>
+        <div class="dash-filter-field">
+          <span>Year</span>
+          ${seasonHtml}
         </div>
         ${
           managerHtml

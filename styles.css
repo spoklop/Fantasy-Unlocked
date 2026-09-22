@@ -8205,10 +8205,14 @@ button.belt-card:hover:not(:disabled),
     0 10px 18px rgba(0, 0, 0, 0.5);
   transform: none;
 }
+#wall-panel .legacy-hall--fame .belt-card,
+#wall-panel .legacy-hall--fame button.belt-card {
+  cursor: default;
+}
 #wall-panel .legacy-hall--fame .belt-card:hover,
 #wall-panel .legacy-hall--fame button.belt-card:hover:not(:disabled) {
-  transform: translateY(-3px);
-  border-color: #c9a227;
+  transform: none;
+  border-color: #3a2816;
   background:
     repeating-linear-gradient(
       90deg,
@@ -8218,8 +8222,8 @@ button.belt-card:hover:not(:disabled),
     );
   box-shadow:
     inset 0 8px 12px rgba(0, 0, 0, 0.45),
-    0 16px 26px rgba(0, 0, 0, 0.55),
-    0 0 18px rgba(232, 197, 71, 0.18);
+    inset 0 -6px 10px rgba(0, 0, 0, 0.35),
+    0 10px 18px rgba(0, 0, 0, 0.5);
 }
 #wall-panel .legacy-hall--fame .belt-card.is-expanded {
   border: 3px solid #e8c547;
@@ -8940,10 +8944,14 @@ button.belt-card:hover:not(:disabled),
     0 10px 18px rgba(0, 0, 0, 0.5);
   transform: none;
 }
+#wall-panel .legacy-hall--pain .belt-card,
+#wall-panel .legacy-hall--pain button.belt-card {
+  cursor: default;
+}
 #wall-panel .legacy-hall--pain .belt-card:hover,
 #wall-panel .legacy-hall--pain button.belt-card:hover:not(:disabled) {
-  transform: translateY(-3px);
-  border-color: #ef4444;
+  transform: none;
+  border-color: #3a1616;
   background:
     repeating-linear-gradient(
       90deg,
@@ -8953,8 +8961,8 @@ button.belt-card:hover:not(:disabled),
     );
   box-shadow:
     inset 0 8px 12px rgba(0, 0, 0, 0.45),
-    0 16px 26px rgba(0, 0, 0, 0.55),
-    0 0 18px rgba(239, 68, 68, 0.22);
+    inset 0 -6px 10px rgba(0, 0, 0, 0.35),
+    0 10px 18px rgba(0, 0, 0, 0.5);
 }
 #wall-panel .legacy-hall--pain .belt-card.is-expanded {
   border: 3px solid #f87171;
@@ -11017,6 +11025,8 @@ button.belt-card:hover:not(:disabled),
     overflow: hidden;
   }
 
+  #wall-panel .legacy-hall--fame .belt-card,
+  #wall-panel .legacy-hall--pain .belt-card,
   #wall-panel .legacy-hall--fame button.belt-card,
   #wall-panel .legacy-hall--pain button.belt-card {
     width: 100%;
@@ -11026,8 +11036,8 @@ button.belt-card:hover:not(:disabled),
     overflow: hidden;
   }
 
-  #wall-panel .legacy-hall--fame button.belt-card:not(.is-expanded),
-  #wall-panel .legacy-hall--pain button.belt-card:not(.is-expanded) {
+  #wall-panel .legacy-hall--fame .belt-card,
+  #wall-panel .legacy-hall--pain .belt-card {
     flex-direction: row;
     align-items: center;
     justify-content: flex-start;
@@ -11037,8 +11047,8 @@ button.belt-card:hover:not(:disabled),
     text-align: left;
   }
 
-  #wall-panel .legacy-hall--fame button.belt-card:not(.is-expanded) .belt-card-top,
-  #wall-panel .legacy-hall--pain button.belt-card:not(.is-expanded) .belt-card-top {
+  #wall-panel .legacy-hall--fame .belt-card .belt-card-top,
+  #wall-panel .legacy-hall--pain .belt-card .belt-card-top {
     flex: 1 1 auto;
     display: flex;
     flex-direction: row;
@@ -11048,8 +11058,8 @@ button.belt-card:hover:not(:disabled),
     width: auto;
   }
 
-  #wall-panel .legacy-hall--fame button.belt-card:not(.is-expanded) .belt-card-icon,
-  #wall-panel .legacy-hall--pain button.belt-card:not(.is-expanded) .belt-card-icon {
+  #wall-panel .legacy-hall--fame .belt-card .belt-card-icon,
+  #wall-panel .legacy-hall--pain .belt-card .belt-card-icon {
     width: 44px;
     height: 44px;
     min-width: 44px;
@@ -11057,8 +11067,8 @@ button.belt-card:hover:not(:disabled),
     font-size: 1.35rem;
   }
 
-  #wall-panel .legacy-hall--fame button.belt-card:not(.is-expanded) .belt-card-title-block,
-  #wall-panel .legacy-hall--pain button.belt-card:not(.is-expanded) .belt-card-title-block {
+  #wall-panel .legacy-hall--fame .belt-card .belt-card-title-block,
+  #wall-panel .legacy-hall--pain .belt-card .belt-card-title-block {
     flex: 1 1 auto;
     width: auto;
     max-width: 100%;
@@ -11073,8 +11083,8 @@ button.belt-card:hover:not(:disabled),
     text-align: left;
   }
 
-  #wall-panel .legacy-hall--fame button.belt-card:not(.is-expanded) .belt-card-title,
-  #wall-panel .legacy-hall--pain button.belt-card:not(.is-expanded) .belt-card-title {
+  #wall-panel .legacy-hall--fame .belt-card .belt-card-title,
+  #wall-panel .legacy-hall--pain .belt-card .belt-card-title {
     font-size: 0.78rem;
     letter-spacing: 0.04em;
     text-align: left;
@@ -11083,8 +11093,8 @@ button.belt-card:hover:not(:disabled),
     text-shadow: none;
   }
 
-  #wall-panel .legacy-hall--fame button.belt-card:not(.is-expanded) .belt-card-centerpiece,
-  #wall-panel .legacy-hall--pain button.belt-card:not(.is-expanded) .belt-card-centerpiece {
+  #wall-panel .legacy-hall--fame .belt-card .belt-card-centerpiece,
+  #wall-panel .legacy-hall--pain .belt-card .belt-card-centerpiece {
     flex: 0 1 46%;
     min-width: 0;
     margin: 0;
@@ -11093,10 +11103,10 @@ button.belt-card:hover:not(:disabled),
     overflow: hidden;
   }
 
-  #wall-panel .legacy-hall--fame button.belt-card:not(.is-expanded) .belt-tied-names,
-  #wall-panel .legacy-hall--fame button.belt-card:not(.is-expanded) .belt-card-holder-name,
-  #wall-panel .legacy-hall--pain button.belt-card:not(.is-expanded) .belt-tied-names,
-  #wall-panel .legacy-hall--pain button.belt-card:not(.is-expanded) .belt-card-holder-name {
+  #wall-panel .legacy-hall--fame .belt-card .belt-tied-names,
+  #wall-panel .legacy-hall--fame .belt-card .belt-card-holder-name,
+  #wall-panel .legacy-hall--pain .belt-card .belt-tied-names,
+  #wall-panel .legacy-hall--pain .belt-card .belt-card-holder-name {
     white-space: normal;
     overflow-wrap: break-word;
     word-break: normal;
