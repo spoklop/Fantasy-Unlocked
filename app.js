@@ -17785,18 +17785,15 @@
       );
     }
 
-    function formatTitleRaceLeader(belt, ownerId) {
+    function formatTitleRaceLeader(belt) {
       const holders = belt?.holders || [];
       const topTotal = Number(belt?.topTotal) || 0;
       if (!holders.length || topTotal <= 0) {
         return { name: "Unclaimed", count: 0 };
       }
-      const names = holders.map((h) => {
-        if (ownerId != null && String(h.ownerId) === String(ownerId)) {
-          return "You";
-        }
-        return String(h.name || "Unknown").trim() || "Unknown";
-      });
+      const names = holders.map(
+        (h) => String(h.name || "Unknown").trim() || "Unknown"
+      );
       return { name: names.join(" · "), count: topTotal };
     }
 
@@ -17810,11 +17807,24 @@
         .map((id) => byId.get(id))
         .filter(Boolean)
         .map((belt) => {
-          const leader = formatTitleRaceLeader(belt, ownerId);
+          const leader = formatTitleRaceLeader(belt);
           const icon = belt.icon || titleRaceFallbackIcon(belt.id);
           const countLabel = leader.count === 1 ? "badge" : "badges";
+          const myTotal =
+            Number(
+              (belt.rows || []).find(
+                (r) => String(r.ownerId) === String(ownerId)
+              )?.total
+            ) || 0;
+          const holdsLead =
+            Number(belt.topTotal) > 0 &&
+            myTotal === Number(belt.topTotal) &&
+            (belt.holders || []).some(
+              (h) => String(h.ownerId) === String(ownerId)
+            );
+          const leadClass = holdsLead ? " yw-title-race-row--lead" : "";
           return `
-            <button type="button" class="yw-title-race-row" data-yw-belt-select="${escapeHtml(
+            <button type="button" class="yw-title-race-row${leadClass}" data-yw-belt-select="${escapeHtml(
               belt.id
             )}" data-category-theme="${escapeHtml(belt.id)}">
               <span class="yw-title-race-icon" aria-hidden="true">${icon}</span>
@@ -17855,34 +17865,19 @@
           return renderYourWeekTitleRaceSummary(belts, ownerId);
         }
         const byId = new Map((belts || []).map((b) => [b.id, b]));
-        const prevById = new Map((prevBelts || []).map((b) => [b.id, b]));
         const belt = byId.get(selectedId);
         if (!belt) {
           state.yourWeekSelectedBeltId = null;
           state.yourWeekExpandedBeltId = null;
           return renderYourWeekTitleRaceSummary(belts, ownerId);
         }
-        const isExpanded = state.yourWeekExpandedBeltId === belt.id;
         return `
         <section class="your-week-section yw-moves-section yw-title-race-detail">
           <button type="button" class="yw-title-race-back" data-yw-belt-back>
             Title Race
           </button>
-          <div class="yw-belt-tracker">
-            <div class="yw-belt-track-block">
-              ${renderYourWeekBeltTrackerRow(
-                belt,
-                ownerId,
-                prevById.get(belt.id) || null,
-                week,
-                isExpanded
-              )}
-              ${
-                isExpanded
-                  ? `<div class="yw-belt-expand">${renderBeltDrawer(belt)}</div>`
-                  : ""
-              }
-            </div>
+          <div class="yw-belt-expand yw-belt-expand--direct">
+            ${renderBeltDrawer(belt)}
           </div>
         </section>`;
       }
@@ -18356,7 +18351,7 @@
         btn.addEventListener("click", () => {
           const id = btn.dataset.ywBeltSelect || null;
           state.yourWeekSelectedBeltId = id;
-          state.yourWeekExpandedBeltId = null;
+          state.yourWeekExpandedBeltId = id;
           renderYourWeekTab();
         });
       });
