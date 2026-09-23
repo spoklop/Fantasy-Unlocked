@@ -180,6 +180,7 @@
       archivesTab: "collections",
       archivesSeason: null,
       winigamiExpandedScore: null,
+      allPointsExpandedVal: null,
       allTempExpandedTemp: null,
       expandedLeaderboardOwnerId: null,
       recordsLoadingTimer: null,
@@ -4204,6 +4205,30 @@
       return result;
     }
 
+    function positionsEligibleForSlot(slot) {
+      const key = String(slot || "").toUpperCase();
+      if (key === "DST" || key === "D/ST") return ["DEF"];
+      if (FLEX_ELIGIBILITY[key]) return FLEX_ELIGIBILITY[key];
+      if (POSITIONS.includes(key)) return [key];
+      return [];
+    }
+
+    function normalizeLineupPosition(pos) {
+      const key = String(pos || "").toUpperCase();
+      if (key === "DST" || key === "D/ST") return "DEF";
+      return key;
+    }
+
+    function canBenchReplaceStarter(bench, started) {
+      const benchPos = normalizeLineupPosition(bench?.position);
+      if (!benchPos || !POSITIONS.includes(benchPos)) return false;
+      const slot = normalizeLineupPosition(started?.slot || started?.position);
+      const eligible = positionsEligibleForSlot(slot);
+      if (eligible.includes(benchPos)) return true;
+      const startedPos = normalizeLineupPosition(started?.position);
+      return !eligible.length && startedPos === benchPos;
+    }
+
     function joinSheetNameChoices(names) {
       const list = (names || []).map((n) => String(n || "").trim()).filter(Boolean);
       if (!list.length) return "";
@@ -4230,6 +4255,7 @@
       const seen = new Set();
       for (const bench of incoming) {
         for (const started of outgoing) {
+          if (!canBenchReplaceStarter(bench, started)) continue;
           const benchKey = String(bench.playerId);
           const startKey = String(started.playerId);
           const pair = `${benchKey}|${startKey}`;
@@ -7737,7 +7763,7 @@
         </article>`;
     }
 
-    function renderBeltDrawer(belt) {
+    function renderBeltDrawer(belt, options = {}) {
       const rowsHtml = belt.rows
         .map((row) => {
           const chips =
@@ -7777,13 +7803,17 @@
         .join("");
 
       const categoryId = belt.id;
+      const bannerLabel = `${belt.icon} ${escapeHtml(belt.name)} Title Race`;
+      const banner = options.closeOnBanner
+        ? `<button type="button" class="belt-drawer-banner" data-yw-belt-back aria-label="Close ${escapeHtml(
+            belt.name
+          )} title race">${bannerLabel}</button>`
+        : `<h4 class="belt-drawer-banner">${bannerLabel}</h4>`;
       return `
         <div class="belt-drawer" data-category-theme="${escapeHtml(
           categoryId
         )}" data-belt-drawer="${escapeHtml(belt.id)}">
-          <h4 class="belt-drawer-banner">${belt.icon} ${escapeHtml(
-            belt.name
-          )} Championship Race</h4>
+          ${banner}
           <div class="belt-drawer-body">
             ${rowsHtml || '<p class="metric-sub">No managers found</p>'}
           </div>
@@ -12650,9 +12680,13 @@
           first.get(val)?.week,
           recentWeek
         );
+      const selected =
+        isMobileDashNav() &&
+        val != null &&
+        String(state.allPointsExpandedVal) === String(val);
       return `<div class="allpoints-cell ${
         isAchieved ? "allpoints-cell--achieved" : ""
-      }${collectionRecentClass(isRecent)}"${colAttr} data-tooltip="${escapeHtml(tooltip)}"${
+      }${collectionRecentClass(isRecent)}${selected ? " allpoints-cell--selected" : ""}"${colAttr} data-val="${escapeHtml(val)}" data-tooltip="${escapeHtml(tooltip)}"${
         isAchieved ? ` data-count="${n}"` : ""
       } title=""></div>`;
     }
@@ -12690,11 +12724,22 @@
         })
         .join("");
 
+      let detailHtml = "";
+      if (isMobileDashNav() && state.allPointsExpandedVal != null) {
+        const val = state.allPointsExpandedVal;
+        const inst = first.get(val);
+        const text = inst
+          ? `${val} pts — ${inst.playerName} (${inst.managerName}) · Week ${inst.week} · ${inst.season}`
+          : `${val} pts — not yet achieved`;
+        detailHtml = `<div class="allpoints-detail">${escapeHtml(text)}</div>`;
+      }
+
       return `
         ${renderCollectionProgress(
           pct,
           `${pct.toFixed(1)}%<br>${count} of ${ap.total} scores achieved`
         )}
+        ${detailHtml}
         <div class="allpoints-grid">${headerHtml}${rowsHtml}</div>`;
     }
 
@@ -12745,67 +12790,87 @@
         return `<p class="metric-sub">No matchup data yet.</p>`;
       }
 
-      const minRow = Math.floor(minScore / 10);
-      const maxRow = Math.floor(maxScore / 10);
+      const mobile = isMobileDashNav();
 
-      let gridHtml = `<div class="winigami-corner"></div>`;
-      for (let col = 0; col <= 9; col++) {
-        gridHtml += `<div class="winigami-col-label">${col}</div>`;
-      }
-
-      for (let row = minRow; row <= maxRow; row++) {
-        gridHtml += `<div class="winigami-row-label">${row}</div>`;
-        for (let col = 0; col <= 9; col++) {
-          const score = row * 10 + col;
-          if (score < minScore || score > maxScore) {
-            gridHtml += `<div></div>`;
-            continue;
-          }
-
-          const hit = achievedMap.get(score);
-          const isAchieved = !!hit;
-          if (isAchieved) achievedCount++;
-
-          const isNewTerritory =
-            priorMax != null &&
-            score > priorMax &&
-            score <= maxScore &&
-            !isAchieved;
-
-          let tooltip;
-          if (isAchieved) {
-            const recent = hit.instances[hit.instances.length - 1];
-            tooltip = `${score} pts — ${recent.winner} def. ${recent.loser} · Wk ${recent.week} · ${recent.season} (${hit.count}×)`;
-          } else {
-            tooltip = `${score} pts — never a winning score`;
-          }
-
-          const firstHit = isAchieved
-            ? earliestCollectionInstance(hit.instances)
-            : null;
-          const isRecent = collectionFillMatchesRecentWeek(
-            firstHit?.season,
-            firstHit?.week,
-            recentWeek
-          );
-
-          const cls = [
-            "winigami-cell",
-            isAchieved ? "winigami-cell--achieved" : "",
-            isNewTerritory ? "winigami-cell--new" : "",
-            isRecent ? "collection-cell--recent" : "",
-          ]
-            .filter(Boolean)
-            .join(" ");
-
-          gridHtml += `<div class="${cls}" data-score="${score}" data-col="${col}" data-tooltip="${escapeHtml(tooltip)}"${
-            isAchieved ? ` data-count="${hit.count}"` : ""
-          }></div>`;
+      function winigamiCellMeta(score) {
+        const hit = achievedMap.get(score);
+        const isAchieved = !!hit;
+        const isNewTerritory =
+          priorMax != null &&
+          score > priorMax &&
+          score <= maxScore &&
+          !isAchieved;
+        let tooltip;
+        if (isAchieved) {
+          const recent = hit.instances[hit.instances.length - 1];
+          tooltip = `${score} pts — ${recent.winner} def. ${recent.loser} · Wk ${recent.week} · ${recent.season} (${hit.count}×)`;
+        } else {
+          tooltip = `${score} pts — never a winning score`;
         }
+        const firstHit = isAchieved
+          ? earliestCollectionInstance(hit.instances)
+          : null;
+        const isRecent = collectionFillMatchesRecentWeek(
+          firstHit?.season,
+          firstHit?.week,
+          recentWeek
+        );
+        const expanded =
+          mobile &&
+          isAchieved &&
+          state.winigamiExpandedScore === score;
+        const cls = [
+          "winigami-cell",
+          isAchieved ? "winigami-cell--achieved" : "",
+          isNewTerritory ? "winigami-cell--new" : "",
+          isRecent ? "collection-cell--recent" : "",
+          expanded ? "winigami-cell--selected" : "",
+        ]
+          .filter(Boolean)
+          .join(" ");
+        return { hit, isAchieved, tooltip, cls };
       }
 
-      const cols = 11;
-      const rows = maxRow - minRow + 1;
+      let boardHtml;
+      if (mobile) {
+        let stripHtml = "";
+        for (let score = minScore; score <= maxScore; score++) {
+          const meta = winigamiCellMeta(score);
+          if (meta.isAchieved) achievedCount++;
+          stripHtml += `<div class="${meta.cls}" data-score="${score}" data-tooltip="${escapeHtml(meta.tooltip)}"${
+            meta.isAchieved ? ` data-count="${meta.hit.count}"` : ""
+          }>${score}</div>`;
+        }
+        boardHtml = `<div class="winigami-wrap winigami-wrap--strip"><div class="winigami-strip">${stripHtml}</div></div>`;
+      } else {
+        const minRow = Math.floor(minScore / 10);
+        const maxRow = Math.floor(maxScore / 10);
+        let gridHtml = `<div class="winigami-corner"></div>`;
+        for (let col = 0; col <= 9; col++) {
+          gridHtml += `<div class="winigami-col-label">${col}</div>`;
+        }
+        for (let row = minRow; row <= maxRow; row++) {
+          gridHtml += `<div class="winigami-row-label">${row}</div>`;
+          for (let col = 0; col <= 9; col++) {
+            const score = row * 10 + col;
+            if (score < minScore || score > maxScore) {
+              gridHtml += `<div></div>`;
+              continue;
+            }
+            const meta = winigamiCellMeta(score);
+            if (meta.isAchieved) achievedCount++;
+            gridHtml += `<div class="${meta.cls}" data-score="${score}" data-col="${col}" data-tooltip="${escapeHtml(meta.tooltip)}"${
+              meta.isAchieved ? ` data-count="${meta.hit.count}"` : ""
+            }></div>`;
+          }
+        }
+        const cols = 11;
+        const rows = maxRow - minRow + 1;
+        boardHtml = `<div class="winigami-wrap">
+          <div class="winigami-grid" style="grid-template-columns: repeat(${cols}, 28px); grid-template-rows: 20px repeat(${rows}, 28px)">${gridHtml}</div>
+        </div>`;
+      }
+
       const expandedHtml =
         state.winigamiExpandedScore != null && achievedMap.has(state.winigamiExpandedScore)
           ? (() => {
@@ -12826,10 +12891,9 @@
           `${achievedCount} of ${w.totalPossible} possible winning scores achieved`
         )}
         <div class="winigami-range">Range: ${minScore} — ${maxScore}</div>
-        <div class="winigami-wrap">
-          <div class="winigami-grid" style="grid-template-columns: repeat(${cols}, 28px); grid-template-rows: 20px repeat(${rows}, 28px)">${gridHtml}</div>
-        </div>
-        ${expandedHtml}`;
+        ${mobile ? expandedHtml : ""}
+        ${boardHtml}
+        ${mobile ? "" : expandedHtml}`;
     }
 
     function renderAllTempPanel(data) {
@@ -13029,6 +13093,17 @@
           renderLeagueCollections();
         });
       });
+
+      if (isMobileDashNav()) {
+        panel.querySelectorAll(".allpoints-cell[data-val]").forEach((el) => {
+          el.addEventListener("click", () => {
+            const val = el.dataset.val;
+            state.allPointsExpandedVal =
+              state.allPointsExpandedVal === val ? null : val;
+            renderLeagueCollections();
+          });
+        });
+      }
 
       show(panel);
     }
@@ -14962,7 +15037,7 @@
                 category: BADGE_CATEGORIES.player,
                 priority: 2,
                 dataLines: [
-                  `${myEntry.playerName} exploded for ${myEntry.pts.toFixed(1)} pts — Highest scoring player in the league this week`,
+                  `${myEntry.playerName} led the league with ${myEntry.pts.toFixed(1)} pts`,
                 ],
                 borderColor: "#8b9cb3",
                 isShame: false,
@@ -15686,8 +15761,15 @@
           }
 
           if (homeAway.isHomeCooking) {
-            const homeCount = homeAway.homeStarters.length;
-            const totalStarters = homeAway.totalStarters;
+            const exceptPlayers = [
+              ...homeAway.awayStarters,
+              ...homeAway.unknownStarters,
+            ];
+            const homeLine = exceptPlayers.length
+              ? `All starters except for ${formatPlayerNameList(
+                  exceptPlayers.map((p) => p.name)
+                )} played at home`
+              : "All starters played at home";
             triggered.push(
               makeBadge({
                 id: "homeCooking",
@@ -15697,9 +15779,7 @@
                 tier: "badge",
                 category: BADGE_CATEGORIES.schedule,
                 priority: 4,
-                dataLines: [
-                  `Home field advantage — ${homeCount} of ${totalStarters} starters played at home`,
-                ],
+                dataLines: [homeLine],
                 borderColor: "#8b9cb3",
                 isShame: false,
               })
@@ -15737,22 +15817,19 @@
           }
 
           if (roofLineup.isGreatOutdoors) {
-            const outdoorCount = roofLineup.outdoorStarters.length;
-            const totalStarters = roofLineup.totalStarters;
             const exceptPlayers = [
               ...roofLineup.domeStarters,
               ...roofLineup.openStarters,
               ...roofLineup.closedStarters,
               ...roofLineup.unknownStarters,
             ];
-            const dataLines =
-              outdoorCount >= totalStarters || !exceptPlayers.length
-                ? []
-                : [
-                    `Every starter except for ${formatPlayerNameList(
-                      exceptPlayers.map((p) => p.name)
-                    )} played outdoors this week`,
-                  ];
+            const dataLines = !exceptPlayers.length
+              ? ["Every starter played outdoors this week"]
+              : [
+                  `Every starter except for ${formatPlayerNameList(
+                    exceptPlayers.map((p) => p.name)
+                  )} played outdoors this week`,
+                ];
             triggered.push(
               makeBadge({
                 id: "greatOutdoors",
@@ -16988,7 +17065,11 @@
         !hasYourWeekSheetPlayerName(s) &&
         !/-?\d+\.\d+/.test(s);
 
-      let m = s.match(/^Every starter except for (.+) played outdoors this week\.?$/i);
+      let m = s.match(/^Every starter(?: except for .+)? played outdoors this week\.?$/i);
+      if (m) {
+        return { flavor: "", instance: s };
+      }
+      m = s.match(/^All starters(?: except for .+)? played at home\.?$/i);
       if (m) {
         return { flavor: "", instance: s };
       }
@@ -17051,10 +17132,14 @@
       const key = resolveBadgeKeyFromBadgeOrId(badge);
       const def = BADGE_DEFINITIONS[key] || {};
       const requirement =
-        (typeof BADGE_CHIP_TIPS !== "undefined" && BADGE_CHIP_TIPS[key]) ||
-        BADGE_CARD_BLURBS[key] ||
-        def.description ||
-        "";
+        key === "belowZero"
+          ? ""
+          : key === "blunderer"
+            ? "Lineup efficiency of 70.0% or worse"
+            : (typeof BADGE_CHIP_TIPS !== "undefined" && BADGE_CHIP_TIPS[key]) ||
+              BADGE_CARD_BLURBS[key] ||
+              def.description ||
+              "";
       const categoryId = getBadgeCategoryId(badge);
       const extraPills = [];
       const lines = [];
@@ -17998,11 +18083,8 @@
         }
         return `
         <section class="your-week-section yw-moves-section yw-title-race-detail">
-          <button type="button" class="yw-title-race-back" data-yw-belt-back>
-            Title Race
-          </button>
           <div class="yw-belt-expand yw-belt-expand--direct">
-            ${renderBeltDrawer(belt)}
+            ${renderBeltDrawer(belt, { closeOnBanner: true })}
           </div>
         </section>`;
       }
@@ -18427,8 +18509,8 @@
       if (!panel) return;
 
       renderYourWeekTabInner(panel).catch((err) => {
-        console.error("Your Week failed to render:", err);
-        panel.innerHTML = `<p class="metric-sub">Could not load Your Week for this selection. Try another week.</p>`;
+        console.error("My Week failed to render:", err);
+        panel.innerHTML = `<p class="metric-sub">Could not load My Week for this selection. Try another week.</p>`;
         show(panel);
       });
     }
@@ -18607,7 +18689,7 @@
       const watch = getRecordWatchData(rosterId, week, seasonYear);
 
       if (!context) {
-        panel.innerHTML = `<p class="metric-sub">Unable to load Your Week for this selection. Try another week.</p>`;
+        panel.innerHTML = `<p class="metric-sub">Unable to load My Week for this selection. Try another week.</p>`;
         show(panel);
         bindYourWeekButtons(panel);
         return;
@@ -18650,7 +18732,7 @@
     }
 
     const DASH_PAGE_TABS = [
-      { id: "yourWeek", label: "Your Week", navHtml: "Your<br>Week", icon: "🏆" },
+      { id: "yourWeek", label: "My Week", navHtml: "My<br>Week", icon: "🏆" },
       { id: "hallFame", label: "Hall of Fame", navHtml: "Hall of<br>Fame", icon: "👑" },
       { id: "hallPain", label: "Hall of Pain", navHtml: "Hall of<br>Pain", icon: "☠️" },
       { id: "achievements", label: "Badge History", navHtml: "Badge<br>History", icon: "🛡️" },
@@ -18658,7 +18740,7 @@
     ];
 
     function dashPageTitle(tab) {
-      return DASH_PAGE_TABS.find((t) => t.id === tab)?.label || "Your Week";
+      return DASH_PAGE_TABS.find((t) => t.id === tab)?.label || "My Week";
     }
 
     function bindMobileDashChrome() {
